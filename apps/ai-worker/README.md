@@ -9,4 +9,4 @@ Responsibilities:
 - Extract scenes per chapter.
 - Generate scene YAML with `chapter_id` and `scene_id`.
 - Generate per-chapter `schema_design_note`.
-- Stream gRPC events back to Go Gateway.
+- Expose HTTP endpoints for the Go Gateway.

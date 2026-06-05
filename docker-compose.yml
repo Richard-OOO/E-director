@@ -1,4 +1,24 @@
 services:
+  mysql:
+    image: mysql:8.4
+    container_name: e-director-mysql
+    environment:
+      MYSQL_DATABASE: e_director
+      MYSQL_USER: e_director
+      MYSQL_PASSWORD: e_director
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - e-director-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
   redis:
     image: redis:7.2-alpine
     container_name: e-director-redis
@@ -25,11 +45,14 @@ services:
     environment:
       APP_ENV: development
       HTTP_PORT: "8080"
+      MYSQL_DSN: e_director:e_director@tcp(mysql:3306)/e_director?parseTime=true
       REDIS_ADDR: redis:6379
       REDIS_DB: "0"
-      AI_WORKER_GRPC_ADDR: ai-worker:9000
+      AI_WORKER_HTTP_ADDR: http://ai-worker:9000
       CORS_ALLOWED_ORIGINS: http://localhost:5173
     depends_on:
+      mysql:
+        condition: service_healthy
       redis:
         condition: service_healthy
       ai-worker:
@@ -46,7 +69,8 @@ services:
       - "9000:9000"
     environment:
       APP_ENV: development
-      GRPC_PORT: "9000"
+      HTTP_PORT: "9000"
+      MYSQL_DSN: e_director:e_director@tcp(mysql:3306)/e_director?parseTime=true
       REDIS_ADDR: redis:6379
       MAX_CONCURRENT_CHAPTERS: "3"
       MAX_CONCURRENT_SCENES: "6"
@@ -54,8 +78,10 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
-      NO_PROXY: redis,gateway,ai-worker,localhost,127.0.0.1
+      NO_PROXY: mysql,redis,gateway,ai-worker,localhost,127.0.0.1
     depends_on:
+      mysql:
+        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
@@ -76,6 +102,7 @@ services:
       - e-director-net
 
 volumes:
+  mysql-data:
   redis-data:
 
 networks:
