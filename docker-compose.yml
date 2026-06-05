@@ -1,0 +1,83 @@
+services:
+  redis:
+    image: redis:7.2-alpine
+    container_name: e-director-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - e-director-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  gateway:
+    build:
+      context: ./apps/gateway
+      dockerfile: Dockerfile
+    container_name: e-director-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ENV: development
+      HTTP_PORT: "8080"
+      REDIS_ADDR: redis:6379
+      REDIS_DB: "0"
+      AI_WORKER_GRPC_ADDR: ai-worker:9000
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
+    depends_on:
+      redis:
+        condition: service_healthy
+      ai-worker:
+        condition: service_started
+    networks:
+      - e-director-net
+
+  ai-worker:
+    build:
+      context: ./apps/ai-worker
+      dockerfile: Dockerfile
+    container_name: e-director-ai-worker
+    ports:
+      - "9000:9000"
+    environment:
+      APP_ENV: development
+      GRPC_PORT: "9000"
+      REDIS_ADDR: redis:6379
+      MAX_CONCURRENT_CHAPTERS: "3"
+      MAX_CONCURRENT_SCENES: "6"
+      LLM_PROVIDER: anthropic
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: redis,gateway,ai-worker,localhost,127.0.0.1
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - e-director-net
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: e-director-web
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+    depends_on:
+      - gateway
+    networks:
+      - e-director-net
+
+volumes:
+  redis-data:
+
+networks:
+  e-director-net:
+    driver: bridge

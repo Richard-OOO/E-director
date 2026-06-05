@@ -1,0 +1,37 @@
+{
+  "event_id": "evt_scene_delta_001",
+  "event_type": "scene_delta",
+  "project_id": "proj_20260605_001",
+  "job_id": "job_20260605_abcdef",
+  "session_id": "sess_9f8a7b6c5d",
+  "sequence": 3,
+  "created_at": "2026-06-05T10:30:08+08:00",
+  "payload": {
+    "chapter_id": "chapter_001",
+    "chapter_title": "第一章 雨夜",
+    "scene_id": "chapter_001_scene_001",
+    "scene_index": 1,
+    "delta_index": 1,
+    "yaml_content": "chapter_id: chapter_001\nchapter_title: 第一章 雨夜\nscene_id: chapter_001_scene_001\nscene_index: 1\ntitle: 雨夜街口\ncamera:\n  - shot_type: wide_shot\n    movement: slow_push_in\n    description: 雨幕覆盖街道，镜头缓慢推向主角。\n",
+    "design_reasons": [
+      {
+        "reason_id": "reason_001",
+        "target_path": "$.camera[0].shot_type",
+        "field_name": "camera.shot_type",
+        "reason_type": "cinematography",
+        "title": "为什么需要镜头类型",
+        "description": "小说中的环境描写需要转译为镜头语言，方便后续 AI 视频生成理解画面构图。",
+        "hover_text": "将小说画面转为可拍摄镜头。",
+        "confidence": 0.91
+      }
+    ],
+    "progress": {
+      "completed_chapters": 0,
+      "total_chapters": 3,
+      "completed_scenes": 0,
+      "total_scenes": 24,
+      "current_scene_progress": 0.35,
+      "overall_progress": 0.02
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://e-director.local/contracts/generate-script-request.schema.json",
+  "title": "GenerateScriptRequest",
+  "type": "object",
+  "required": ["project_id", "session_id", "novel", "generation_config"],
+  "properties": {
+    "project_id": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "novel": {
+      "type": "object",
+      "required": ["title", "language", "source_type", "content"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "enum": ["zh-CN", "en-US"] },
+        "source_type": { "type": "string", "enum": ["plain_text"] },
+        "content": { "type": "string", "minLength": 1000 },
+        "chapter_count_hint": { "type": "integer", "minimum": 3 }
+      },
+      "additionalProperties": false
+    },
+    "generation_config": {
+      "type": "object",
+      "required": [
+        "target_format",
+        "scene_granularity",
+        "enable_dynamic_schema",
+        "enable_design_reasons",
+        "enable_camera_directions",
+        "enable_dialogues",
+        "enable_emotion_tags",
+        "max_concurrent_chapters",
+        "max_concurrent_scenes",
+        "stream_mode"
+      ],
+      "properties": {
+        "target_format": { "type": "string", "enum": ["yaml"] },
+        "scene_granularity": { "type": "string", "enum": ["coarse", "medium", "fine"] },
+        "enable_dynamic_schema": { "type": "boolean" },
+        "enable_design_reasons": { "type": "boolean" },
+        "enable_camera_directions": { "type": "boolean" },
+        "enable_dialogues": { "type": "boolean" },
+        "enable_emotion_tags": { "type": "boolean" },
+        "max_concurrent_chapters": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "max_concurrent_scenes": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "stream_mode": { "type": "string", "enum": ["scene_delta"] }
+      },
+      "additionalProperties": false
+    },
+    "output_preferences": {
+      "type": "object",
+      "properties": {
+        "yaml_style": { "type": "string", "enum": ["block_literal", "compact"] },
+        "include_schema_summary": { "type": "boolean" },
+        "include_scene_index": { "type": "boolean" },
+        "include_character_registry": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "client_context": {
+      "type": "object",
+      "properties": {
+        "timezone": { "type": "string" },
+        "locale": { "type": "string" },
+        "request_id": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
