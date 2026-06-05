@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://e-director.local/contracts/scene-delta-payload.schema.json",
+  "title": "SceneDeltaPayload",
+  "type": "object",
+  "required": ["chapter_id", "scene_id", "yaml_content", "design_reasons"],
+  "properties": {
+    "chapter_id": { "type": "string", "minLength": 1 },
+    "chapter_title": { "type": "string" },
+    "scene_id": { "type": "string", "minLength": 1 },
+    "scene_index": { "type": "integer", "minimum": 1 },
+    "delta_index": { "type": "integer", "minimum": 1 },
+    "yaml_content": {
+      "type": "string",
+      "description": "当前场景生成的 YAML 内容，可为增量片段或阶段性完整片段。"
+    },
+    "design_reasons": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/designReason" }
+    },
+    "progress": {
+      "type": "object",
+      "properties": {
+        "completed_chapters": { "type": "integer", "minimum": 0 },
+        "total_chapters": { "type": "integer", "minimum": 1 },
+        "completed_scenes": { "type": "integer", "minimum": 0 },
+        "total_scenes": { "type": "integer", "minimum": 1 },
+        "current_scene_progress": { "type": "number", "minimum": 0, "maximum": 1 },
+        "overall_progress": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "designReason": {
+      "type": "object",
+      "required": ["reason_id", "target_path", "field_name", "reason_type", "title", "description", "hover_text"],
+      "properties": {
+        "reason_id": { "type": "string", "minLength": 1 },
+        "target_path": { "type": "string", "minLength": 1 },
+        "field_name": { "type": "string", "minLength": 1 },
+        "reason_type": {
+          "type": "string",
+          "enum": [
+            "cinematography",
+            "dialogue_structure",
+            "emotion_modeling",
+            "character_intent",
+            "narrative_pacing",
+            "scene_transition",
+            "visual_continuity",
+            "production_metadata",
+            "schema_composability"
+          ]
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "hover_text": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

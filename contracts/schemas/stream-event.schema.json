@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://e-director.local/contracts/stream-event.schema.json",
+  "title": "StreamEvent",
+  "type": "object",
+  "required": ["event_id", "event_type", "project_id", "job_id", "session_id", "sequence", "created_at", "payload"],
+  "properties": {
+    "event_id": { "type": "string", "minLength": 1 },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "generation_started",
+        "chapter_started",
+        "scene_started",
+        "scene_delta",
+        "scene_completed",
+        "chapter_completed",
+        "schema_summary",
+        "generation_completed",
+        "generation_failed"
+      ]
+    },
+    "project_id": { "type": "string", "minLength": 1 },
+    "job_id": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": false
+}
