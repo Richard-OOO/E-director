@@ -1,11 +1,11 @@
 # Vue Web Workspace
 
-Vue 3 + Vite + Tailwind frontend for E-director.
+Vue 3 + Vite frontend for E-director.
 
 Responsibilities:
 
 - Upload or paste novel text.
 - Start script generation through Go Gateway.
-- Receive SSE stream events.
+- Receive JSON API responses from the gateway.
 - Render scene YAML incrementally.
-- Show `design_reasons` as hover tooltips.
+- Show design reasons as hover tooltips.
