@@ -21,5 +21,11 @@ func Open(dsn string) (*gorm.DB, error) {
 }
 
 func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(&User{})
+	return db.AutoMigrate(
+		&User{},
+		&GenerationProject{},
+		&GenerationJob{},
+		&GenerationChapter{},
+		&GenerationScene{},
+	)
 }
