@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Director — AI Directing Suite</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        [v-cloak] { display: none !important; }
+    </style>
+</head>
+<body>
+    <div id="app" v-cloak>
+        <!-- GLOBAL SIDEBAR -->
+        <aside class="main-sidebar" :style="{ width: sidebarWidth + 'px' }">
+            <div class="resizer" @mousedown="startResize"></div>
+            <div class="sidebar-logo">
+                <span v-if="sidebarWidth > 150">E-DIRECTOR</span>
+                <span v-else>ED</span>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-item" :class="{ active: view === 'new' }" @click="view = 'new'">
+                    <div class="nav-icon">＋</div>
+                    <div class="nav-label" v-show="sidebarWidth > 150">{{ t.sidebar.new }}</div>
+                </div>
+                <div class="nav-item" :class="{ active: view === 'archive' }" @click="view = 'archive'">
+                    <div class="nav-icon">▤</div>
+                    <div class="nav-label" v-show="sidebarWidth > 150">{{ t.sidebar.archive }}</div>
+                </div>
+                <div class="nav-item" :class="{ active: view === 'prompts' }" @click="view = 'prompts'">
+                    <div class="nav-icon">✒</div>
+                    <div class="nav-label" v-show="sidebarWidth > 150">{{ t.sidebar.prompts }}</div>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <div class="main-content">
+            <header>
+                <div class="view-title">{{ currentViewTitle }}</div>
+                <div class="nav-meta">
+                    <div class="lang-switch" @click="toggleLang">
+                        <span :class="{ active: lang === 'en' }">EN</span>
+                        <span style="opacity: 0.1">|</span>
+                        <span :class="{ active: lang === 'zh' }">中</span>
+                    </div>
+                </div>
+            </header>
+
+            <div class="view-scroller">
+                <!-- 1. NEW PROJECT VIEW -->
+                <div v-if="view === 'new'" class="workflow-view">
+                    <div class="view-container">
+                        <transition name="slide">
+                            <!-- Stage: Import -->
+                            <div v-if="currentStage === 'import'" class="stage-view" key="import">
+                                <div class="card-import">
+                                    <h2>{{ t.import.h2 }}</h2>
+                                    <p>{{ t.import.p }}</p>
+                                    <div class="upload-zone" @click="startProcessing">
+                                        <h4>{{ t.import.upload }}</h4>
+                                        <p style="font-size: 12px; opacity: 0.5;">Word, PDF, TXT</p>
+                                    </div>
+                                    <button class="btn-submit" @click="startProcessing">{{ t.import.cta }}</button>
+                                </div>
+                            </div>
+
+                            <!-- Stage: Processing -->
+                            <div v-else-if="currentStage === 'processing'" class="stage-view" key="processing">
+                                <div style="text-align: center;">
+                                    <h2 style="font-family: var(--serif); font-style: italic; font-size: 32px; margin-bottom: 24px;">{{ t.processing.h2 }}</h2>
+                                    <div class="loader-bar" style="width: 300px; height: 1px; background: var(--line); margin: 0 auto; position: relative; overflow: hidden;">
+                                        <div style="position: absolute; left: -100%; width: 100%; height: 100%; background: var(--coral); animation: load 2s infinite;"></div>
+                                    </div>
+                                    <p style="margin-top: 24px; font-family: var(--mono); font-size: 12px; color: var(--muted);">{{ t.processing.p }}</p>
+                                </div>
+                            </div>
+
+                            <!-- Stage: Editor -->
+                            <div v-else-if="currentStage === 'editor'" class="workspace" key="editor">
+                                <aside class="sidebar-editor">
+                                    <h3 class="panel-title">{{ t.editor.outline }}</h3>
+                                    <div class="chapter-list">
+                                        <div v-for="chap in chapters" :key="chap.id">
+                                            <div class="chapter-header" @click="chap.open = !chap.open">
+                                                <span>{{ chap.num }} · {{ chap.title }}</span>
+                                                <span style="opacity: 0.3">{{ chap.open ? '−' : '+' }}</span>
+                                            </div>
+                                            <div v-show="chap.open" style="padding: 8px 40px 16px;">
+                                                <div v-for="scene in chap.scenes" :key="scene.id" 
+                                                     class="scene-item" :class="{ active: activeScene === scene.id }"
+                                                     @click="scrollToScene(scene.id)">
+                                                    {{ scene.num }} {{ scene.title }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </aside>
+
+                                <div class="editor-scroll">
+                                    <div class="yaml-document">
+                                        <div v-for="chap in chapters" :key="'doc-'+chap.id">
+                                            <div v-for="scene in chap.scenes" :key="'sec-'+scene.id" 
+                                                 :id="'scene-'+scene.id" class="yaml-section">
+                                                <div class="yaml-code">
+<span class="yaml-key">scene:</span> <span class="yaml-val">{{ scene.num }}</span>
+<span class="yaml-key">title:</span> <span class="yaml-val">{{ scene.title }}</span>
+<span class="yaml-key">intent:</span> <span class="yaml-val">{{ scene.intent }}</span>
+<span class="yaml-key">location:</span> <span class="yaml-val">INT. STUDIO - DAY</span>
+                                                </div>
+                                                <div class="yaml-commentary">
+                                                    <span class="meta">AI Observation</span>
+                                                    <h6>{{ scene.title }}</h6>
+                                                    <p>{{ scene.comment }}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Stage: Export -->
+                            <div v-else-if="currentStage === 'export'" class="stage-view" key="export">
+                                <div style="text-align: center;">
+                                    <h2 style="font-family: var(--serif); font-size: 48px; margin-bottom: 40px;">Ready to Deliver</h2>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 800px; margin: 0 auto;">
+                                        <div style="background: white; padding: 40px; border: 1px solid var(--line); border-radius: 4px; text-align: left;">
+                                            <h3 style="font-family: var(--serif); font-size: 24px; margin-bottom: 16px;">Director's Cut</h3>
+                                            <p style="font-size: 14px; color: var(--muted); margin-bottom: 24px;">Export as a cinematic high-fidelity preview.</p>
+                                            <button class="btn-submit" style="width: 100%;">Export PDF</button>
+                                        </div>
+                                        <div style="background: white; padding: 40px; border: 1px solid var(--line); border-radius: 4px; text-align: left;">
+                                            <h3 style="font-family: var(--serif); font-size: 24px; margin-bottom: 16px;">YAML Raw Script</h3>
+                                            <p style="font-size: 14px; color: var(--muted); margin-bottom: 24px;">Export the structured script for engine import.</p>
+                                            <button class="btn-submit" style="width: 100%;">Export YAML</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </transition>
+
+                        <!-- Flow Nav - FIXED TO VIEW -->
+                        <div class="flow-nav-minimal">
+                            <div class="flow-arrow-min" @click="prevStage">←</div>
+                            <div class="flow-line-wrap">
+                                <div v-for="s in stages" 
+                                     :key="s" class="flow-dot" :class="{ active: currentStage === s }"
+                                     @click="currentStage = s"></div>
+                            </div>
+                            <div class="flow-arrow-min" @click="nextStage">→</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. ARCHIVE VIEW -->
+                <div v-else-if="view === 'archive'" class="archive-view">
+                    <div class="archive-grid">
+                        <div v-for="item in archiveItems" :key="item.id" 
+                             class="archive-card" :class="item.pattern">
+                            <div class="card-content">
+                                <span class="card-tag">{{ t.archive.tag }}</span>
+                                <h3 class="card-title">{{ item.title }}</h3>
+                                <div class="card-footer">
+                                    <span>{{ item.date }}</span>
+                                    <span>{{ t.archive.footer }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. PROMPTS VIEW -->
+                <div v-else-if="view === 'prompts'" class="prompts-view">
+                    <div class="prompt-grid">
+                        <div v-for="p in prompts" :key="p.id" class="prompt-card">
+                            <div class="prompt-num">{{ p.num }}</div>
+                            <div class="prompt-content">
+                                <p class="prompt-text">{{ p.text }}</p>
+                                <div class="prompt-tags">
+                                    <span v-for="tag in p.tags" :key="tag" class="prompt-tag">{{ tag }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        // Simple stage navigation helpers
+        app.config.globalProperties.stages = ['import', 'processing', 'editor', 'export'];
+        app.config.globalProperties.prevStage = function() {
+            const idx = this.stages.indexOf(this.currentStage);
+            if (idx > 0) this.currentStage = this.stages[idx - 1];
+        };
+        app.config.globalProperties.nextStage = function() {
+            const idx = this.stages.indexOf(this.currentStage);
+            if (idx < this.stages.length - 1) this.currentStage = this.stages[idx + 1];
+        };
+    </script>
+</body>
+</html>
