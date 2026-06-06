@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
+import { useRouter } from 'vue-router'
+
+import { login } from '@/auth'
 import { useI18n } from '@/i18n/useI18n'
 
+const router = useRouter()
 const { lang, t } = useI18n()
 
 const form = ref({
@@ -20,24 +24,13 @@ const handleSubmit = async () => {
   statusMessage.value = ''
 
   try {
-    const response = await fetch('/api/v1/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email: form.value.email,
-        password: form.value.password,
-      }),
+    await login({
+      email: form.value.email,
+      password: form.value.password,
     })
 
-    const result = await response.json()
-
-    if (!response.ok || result.code !== 0) {
-      throw new Error(result.message || 'Login failed')
-    }
-
     statusMessage.value = t.value.login.success
+    await router.push('/workspace')
   } catch (error) {
     statusMessage.value = error instanceof Error ? error.message : 'Login failed'
   } finally {

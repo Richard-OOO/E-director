@@ -325,6 +325,37 @@ a {
   background: white;
 }
 
+.code-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.btn-secondary {
+  min-width: 132px;
+  padding: 0 18px;
+  border: 1px solid var(--ink);
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  transition: all 0.2s;
+}
+
+.btn-secondary:disabled,
+.btn-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-secondary:not(:disabled):hover {
+  opacity: 0.85;
+}
+
 .btn-submit {
   width: 100%;
   margin-top: 10px;
@@ -350,6 +381,74 @@ a {
   font-size: 14px;
   font-weight: 600;
   text-align: center;
+}
+
+.workspace-screen {
+  min-height: 80vh;
+  padding-top: 80px;
+  padding-bottom: 80px;
+}
+
+.workspace-card {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 64px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(10px);
+  text-align: center;
+}
+
+.workspace-card .eyebrow {
+  margin-bottom: 18px;
+  color: var(--coral);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.workspace-card h1 {
+  margin-bottom: 24px;
+  font-family: var(--serif);
+  font-size: clamp(44px, 7vw, 76px);
+  line-height: 0.95;
+}
+
+.workspace-card > p {
+  max-width: 560px;
+  margin: 0 auto 32px;
+  color: var(--muted);
+  font-size: 17px;
+}
+
+.workspace-panel {
+  display: grid;
+  gap: 8px;
+  margin: 32px 0;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.workspace-panel span,
+.workspace-panel small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.workspace-panel strong {
+  font-family: var(--serif);
+  font-size: 32px;
+}
+
+.workspace-action {
+  max-width: 260px;
 }
 
 .footer {
@@ -380,6 +479,14 @@ a {
 
   .auth-card {
     padding: 40px 24px;
+  }
+
+  .code-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .btn-secondary {
+    min-height: 48px;
   }
 
   .nav-right {
