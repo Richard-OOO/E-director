@@ -29,6 +29,7 @@ type GenerationService struct {
 	splitter      ChapterSplitter
 	promptBuilder ChapterPromptBuilder
 	generator     ChapterGenerator
+	events        *GenerationEventBus
 }
 
 type CreateProjectInput struct {
@@ -45,8 +46,8 @@ type CreateProjectResult struct {
 	Status    domain.GenerationJobStatus
 }
 
-func NewGenerationService(store GenerationStore, splitter ChapterSplitter, promptBuilder ChapterPromptBuilder, generator ChapterGenerator) *GenerationService {
-	return &GenerationService{store: store, splitter: splitter, promptBuilder: promptBuilder, generator: generator}
+func NewGenerationService(store GenerationStore, splitter ChapterSplitter, promptBuilder ChapterPromptBuilder, generator ChapterGenerator, events *GenerationEventBus) *GenerationService {
+	return &GenerationService{store: store, splitter: splitter, promptBuilder: promptBuilder, generator: generator, events: events}
 }
 
 func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input CreateProjectInput) (CreateProjectResult, error) {
@@ -108,9 +109,21 @@ func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input Cre
 		return CreateProjectResult{}, err
 	}
 	_ = s.store.UpdateJobStatus(ctx, jobID, domain.GenerationJobChapterProcessing)
+	s.publishGenerationEvent(domain.GenerationEventStarted, projectID, jobID, 0, map[string]any{
+		"project_id":    projectID,
+		"job_id":        jobID,
+		"chapter_count": len(chapters),
+	})
 
 	previousContext := ChapterCarryContext{}
 	for i, chapter := range chapters {
+		chapterProgress := domain.GenerationProgressPayload{
+			CompletedChapters: i,
+			TotalChapters:     len(chapters),
+			OverallProgress:   progressPercent(i, len(chapters)),
+		}
+		s.publishChapterEvent(domain.GenerationEventChapterStarted, projectID, jobID, i+1, chapter, chapterProgress)
+
 		prompt := s.promptBuilder.BuildChapterPrompt(ChapterPromptInput{
 			NovelTitle:      project.Title,
 			Language:        project.Language,
@@ -135,6 +148,8 @@ func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input Cre
 			chapter.UpdatedAt = time.Now().UTC()
 			_ = s.store.UpdateChapterResult(ctx, chapter)
 			_ = s.store.UpdateJobStatus(ctx, jobID, domain.GenerationJobFailed)
+			s.publishFailureEvent(projectID, jobID, chapter, err, i, len(chapters))
+			s.closeEventStream(projectID, jobID)
 			return CreateProjectResult{}, err
 		}
 		chapter.Status = domain.GenerationChapterCompleted
@@ -172,9 +187,11 @@ func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input Cre
 			return CreateProjectResult{}, err
 		}
 		previousContext = result.CarryContext
-		_ = i
+		s.publishChapterCompletedEvent(projectID, jobID, chapter, result, i+1, len(chapters))
 	}
 	_ = s.store.UpdateJobStatus(ctx, jobID, domain.GenerationJobCompleted)
+	s.publishGenerationCompletedEvent(projectID, jobID, len(chapters))
+	s.closeEventStream(projectID, jobID)
 	return CreateProjectResult{ProjectID: projectID, JobID: jobID, Status: domain.GenerationJobCompleted}, nil
 }
 
@@ -190,6 +207,82 @@ func (s *GenerationService) ListProjects(ctx context.Context, userID string) ([]
 		return nil, ErrStorageUnavailable
 	}
 	return s.store.ListProjects(ctx, userID)
+}
+
+func (s *GenerationService) publishGenerationEvent(eventType domain.GenerationEventType, projectID, jobID string, sequence int, payload any) {
+	if s.events == nil {
+		return
+	}
+	s.events.Publish(domain.GenerationEvent{EventID: newID("event", projectID, jobID, fmt.Sprintf("%d", sequence), string(eventType)), EventType: eventType, ProjectID: projectID, JobID: jobID, Sequence: sequence, CreatedAt: time.Now().UTC(), Payload: payload})
+}
+
+func (s *GenerationService) publishChapterEvent(eventType domain.GenerationEventType, projectID, jobID string, sequence int, chapter domain.GenerationChapter, progress domain.GenerationProgressPayload) {
+	if s.events == nil {
+		return
+	}
+	payload := domain.ChapterStatusPayload{ChapterID: chapter.ChapterID, ChapterTitle: chapter.Title, ChapterIndex: chapter.ChapterIndex, Status: chapter.Status, Progress: progress}
+	s.events.Publish(domain.GenerationEvent{EventID: newID("event", projectID, jobID, chapter.ChapterID, string(eventType)), EventType: eventType, ProjectID: projectID, JobID: jobID, Sequence: sequence, CreatedAt: time.Now().UTC(), Payload: payload})
+}
+
+func (s *GenerationService) publishChapterCompletedEvent(projectID, jobID string, chapter domain.GenerationChapter, result ChapterGenerationResult, sequence, total int) {
+	if s.events == nil {
+		return
+	}
+	payload := domain.ChapterStatusPayload{
+		ChapterID:    chapter.ChapterID,
+		ChapterTitle: chapter.Title,
+		ChapterIndex: chapter.ChapterIndex,
+		Status:       domain.GenerationChapterCompleted,
+		Progress: domain.GenerationProgressPayload{
+			CompletedChapters: sequence,
+			TotalChapters:     total,
+			CompletedScenes:   len(result.Scenes),
+			TotalScenes:       len(result.Scenes),
+			OverallProgress:   progressPercent(sequence, total),
+		},
+	}
+	s.events.Publish(domain.GenerationEvent{EventID: newID("event", projectID, jobID, chapter.ChapterID, "completed"), EventType: domain.GenerationEventChapterCompleted, ProjectID: projectID, JobID: jobID, Sequence: sequence, CreatedAt: time.Now().UTC(), Payload: payload})
+}
+
+func (s *GenerationService) publishFailureEvent(projectID, jobID string, chapter domain.GenerationChapter, err error, sequence, total int) {
+	if s.events == nil {
+		return
+	}
+	payload := domain.ChapterStatusPayload{
+		ChapterID:    chapter.ChapterID,
+		ChapterTitle: chapter.Title,
+		ChapterIndex: chapter.ChapterIndex,
+		Status:       domain.GenerationChapterFailed,
+		Progress: domain.GenerationProgressPayload{
+			CompletedChapters: sequence,
+			TotalChapters:     total,
+			OverallProgress:   progressPercent(sequence, total),
+		},
+		Error: &domain.GenerationError{Message: err.Error(), Retryable: false},
+	}
+	s.events.Publish(domain.GenerationEvent{EventID: newID("event", projectID, jobID, chapter.ChapterID, "failed"), EventType: domain.GenerationEventFailed, ProjectID: projectID, JobID: jobID, Sequence: sequence, CreatedAt: time.Now().UTC(), Payload: payload})
+}
+
+func (s *GenerationService) publishGenerationCompletedEvent(projectID, jobID string, total int) {
+	if s.events == nil {
+		return
+	}
+	payload := domain.GenerationProgressPayload{CompletedChapters: total, TotalChapters: total, OverallProgress: 100}
+	s.events.Publish(domain.GenerationEvent{EventID: newID("event", projectID, jobID, "completed"), EventType: domain.GenerationEventCompleted, ProjectID: projectID, JobID: jobID, Sequence: total, CreatedAt: time.Now().UTC(), Payload: payload})
+}
+
+func (s *GenerationService) closeEventStream(projectID, jobID string) {
+	if s.events == nil {
+		return
+	}
+	s.events.Close(projectID, jobID)
+}
+
+func progressPercent(completed, total int) float64 {
+	if total <= 0 {
+		return 0
+	}
+	return float64(completed) / float64(total) * 100
 }
 
 func renderDesignNoteYAML(note ChapterSchemaDesignNote) string {

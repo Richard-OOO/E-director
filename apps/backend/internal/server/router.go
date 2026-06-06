@@ -8,9 +8,10 @@ import (
 )
 
 type Handlers struct {
-	System  *handler.SystemHandler
-	Auth    *handler.AuthHandler
-	Project *handler.ProjectHandler
+	System        *handler.SystemHandler
+	Auth          *handler.AuthHandler
+	Project       *handler.ProjectHandler
+	ProjectStream *handler.ProjectStreamHandler
 }
 
 func NewRouter(cfg config.Config, handlers Handlers) *gin.Engine {
@@ -32,7 +33,8 @@ func NewRouter(cfg config.Config, handlers Handlers) *gin.Engine {
 	projects := api.Group("/projects")
 	projects.POST("", handlers.Project.Create)
 	projects.GET("", handlers.Project.List)
-	projects.GET(":project_id", handlers.Project.Detail)
+	projects.GET("/:project_id", handlers.Project.Detail)
+	projects.GET("/:project_id/events", handlers.ProjectStream.Stream)
 
 	return router
 }

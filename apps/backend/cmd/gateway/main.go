@@ -35,14 +35,17 @@ func main() {
 		From:     cfg.SMTPFrom,
 	})
 	authService := service.NewAuthService(userStore, sessionStore, codeStore, service.WithMailer(mailer), service.WithMaxCodeAttempts(cfg.CodeMaxAttempts))
-	generationService := service.NewGenerationService(generationStore, service.NewChapterSplitter(), service.NewChapterPromptBuilder(), service.NewMockChapterGenerator())
+	eventBus := service.NewGenerationEventBus()
+	generationService := service.NewGenerationService(generationStore, service.NewChapterSplitter(), service.NewChapterPromptBuilder(), service.NewMockChapterGenerator(), eventBus)
 	authHandler := handler.NewAuthHandler(authService, cfg)
 	projectHandler := handler.NewProjectHandler(authHandler, generationService)
+	projectStreamHandler := handler.NewProjectStreamHandler(authHandler, eventBus)
 
 	router := server.NewRouter(cfg, server.Handlers{
-		System:  handler.NewSystemHandler(),
-		Auth:    authHandler,
-		Project: projectHandler,
+		System:        handler.NewSystemHandler(),
+		Auth:          authHandler,
+		Project:       projectHandler,
+		ProjectStream: projectStreamHandler,
 	})
 
 	log.Printf("backend listening on %s", cfg.ListenAddr)
