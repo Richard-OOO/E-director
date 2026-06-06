@@ -1,51 +1,90 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 
+import { useRouter } from 'vue-router'
+
+import { register, sendRegisterCode } from '@/auth'
 import { useI18n } from '@/i18n/useI18n'
 
+const router = useRouter()
 const { lang, t } = useI18n()
 
 const form = ref({
   name: '',
   email: '',
   password: '',
+  verificationCode: '',
 })
 
 const statusMessage = ref('')
 const isSubmitting = ref(false)
+const isSendingCode = ref(false)
+const cooldownSeconds = ref(0)
+let cooldownTimer: number | undefined
 
 const submitLabel = computed(() => (isSubmitting.value ? t.value.register.submiting : t.value.register.submit))
+const codeButtonLabel = computed(() => {
+  if (isSendingCode.value) return t.value.register.sendingCode
+  if (cooldownSeconds.value > 0) return `${t.value.register.resendIn} ${cooldownSeconds.value}s`
+  return t.value.register.sendCode
+})
+const isCodeButtonDisabled = computed(() => isSendingCode.value || cooldownSeconds.value > 0 || !form.value.email)
+
+const startCooldown = (seconds: number) => {
+  cooldownSeconds.value = seconds
+  if (cooldownTimer) {
+    window.clearInterval(cooldownTimer)
+  }
+  cooldownTimer = window.setInterval(() => {
+    cooldownSeconds.value = Math.max(cooldownSeconds.value - 1, 0)
+    if (cooldownSeconds.value === 0 && cooldownTimer) {
+      window.clearInterval(cooldownTimer)
+      cooldownTimer = undefined
+    }
+  }, 1000)
+}
+
+const handleSendCode = async () => {
+  isSendingCode.value = true
+  statusMessage.value = ''
+
+  try {
+    const result = await sendRegisterCode({ email: form.value.email })
+    statusMessage.value = t.value.register.codeSent
+    startCooldown(result.cooldown_seconds)
+  } catch (error) {
+    statusMessage.value = error instanceof Error ? error.message : 'Failed to send verification code'
+  } finally {
+    isSendingCode.value = false
+  }
+}
 
 const handleSubmit = async () => {
   isSubmitting.value = true
   statusMessage.value = ''
 
   try {
-    const response = await fetch('/api/v1/auth/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: form.value.name,
-        email: form.value.email,
-        password: form.value.password,
-      }),
+    await register({
+      name: form.value.name,
+      email: form.value.email,
+      password: form.value.password,
+      verification_code: form.value.verificationCode,
     })
 
-    const result = await response.json()
-
-    if (!response.ok || result.code !== 0) {
-      throw new Error(result.message || 'Register failed')
-    }
-
     statusMessage.value = t.value.register.success
+    await router.push('/workspace')
   } catch (error) {
     statusMessage.value = error instanceof Error ? error.message : 'Register failed'
   } finally {
     isSubmitting.value = false
   }
 }
+
+onBeforeUnmount(() => {
+  if (cooldownTimer) {
+    window.clearInterval(cooldownTimer)
+  }
+})
 </script>
 
 <template>
@@ -87,6 +126,24 @@ const handleSubmit = async () => {
             autocomplete="new-password"
             required
           />
+        </div>
+        <div class="form-group">
+          <label for="register-code">{{ t.register.verificationCode }}</label>
+          <div class="code-input-row">
+            <input
+              id="register-code"
+              v-model.trim="form.verificationCode"
+              type="text"
+              inputmode="numeric"
+              maxlength="6"
+              placeholder="123456"
+              autocomplete="one-time-code"
+              required
+            />
+            <button class="btn-secondary" type="button" :disabled="isCodeButtonDisabled" @click="handleSendCode">
+              {{ codeButtonLabel }}
+            </button>
+          </div>
         </div>
         <button class="btn-submit" type="submit" :disabled="isSubmitting">
           {{ submitLabel }}
