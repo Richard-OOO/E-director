@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/domain"
-	mysqlmodels "github.com/Richard-OOO/E-director/apps/gateway/internal/models/mysql"
-	redismodels "github.com/Richard-OOO/E-director/apps/gateway/internal/models/redis"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/domain"
+	mysqlmodels "github.com/Richard-OOO/E-director/apps/backend/internal/models/mysql"
+	redismodels "github.com/Richard-OOO/E-director/apps/backend/internal/models/redis"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
