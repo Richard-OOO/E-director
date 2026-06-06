@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/config"
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/domain"
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/response"
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/service"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/config"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/domain"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/response"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
 

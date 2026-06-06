@@ -1,15 +1,16 @@
 package server
 
 import (
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/config"
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/handler"
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/middleware"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/config"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/handler"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
 
 type Handlers struct {
-	System *handler.SystemHandler
-	Auth   *handler.AuthHandler
+	System  *handler.SystemHandler
+	Auth    *handler.AuthHandler
+	Project *handler.ProjectHandler
 }
 
 func NewRouter(cfg config.Config, handlers Handlers) *gin.Engine {
@@ -27,6 +28,11 @@ func NewRouter(cfg config.Config, handlers Handlers) *gin.Engine {
 	auth.POST("/login", handlers.Auth.Login)
 	auth.POST("/logout", handlers.Auth.Logout)
 	auth.GET("/me", handlers.Auth.Me)
+
+	projects := api.Group("/projects")
+	projects.POST("", handlers.Project.Create)
+	projects.GET("", handlers.Project.List)
+	projects.GET(":project_id", handlers.Project.Detail)
 
 	return router
 }

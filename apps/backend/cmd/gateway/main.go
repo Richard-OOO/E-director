@@ -4,12 +4,12 @@ import (
 	"context"
 	"log"
 
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/config"
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/handler"
-	mysqlmodels "github.com/Richard-OOO/E-director/apps/gateway/internal/models/mysql"
-	redismodels "github.com/Richard-OOO/E-director/apps/gateway/internal/models/redis"
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/server"
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/service"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/config"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/handler"
+	mysqlmodels "github.com/Richard-OOO/E-director/apps/backend/internal/models/mysql"
+	redismodels "github.com/Richard-OOO/E-director/apps/backend/internal/models/redis"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/server"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/service"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +24,7 @@ func main() {
 	}
 
 	userStore := mysqlmodels.NewUserStore(db)
+	generationStore := mysqlmodels.NewGenerationStore(db)
 	sessionStore := redismodels.NewSessionStore(rdb, cfg.SessionTTL)
 	codeStore := redismodels.NewVerificationCodeStoreWithLimits(rdb, cfg.VerificationTTL, cfg.CodeCooldown, cfg.CodeAttemptTTL)
 	mailer := service.NewSMTPMailer(service.SMTPConfig{
@@ -34,15 +35,19 @@ func main() {
 		From:     cfg.SMTPFrom,
 	})
 	authService := service.NewAuthService(userStore, sessionStore, codeStore, service.WithMailer(mailer), service.WithMaxCodeAttempts(cfg.CodeMaxAttempts))
+	generationService := service.NewGenerationService(generationStore, service.NewChapterSplitter(), service.NewChapterPromptBuilder(), service.NewMockChapterGenerator())
+	authHandler := handler.NewAuthHandler(authService, cfg)
+	projectHandler := handler.NewProjectHandler(authHandler, generationService)
 
 	router := server.NewRouter(cfg, server.Handlers{
-		System: handler.NewSystemHandler(),
-		Auth:   handler.NewAuthHandler(authService, cfg),
+		System:  handler.NewSystemHandler(),
+		Auth:    authHandler,
+		Project: projectHandler,
 	})
 
-	log.Printf("gateway listening on %s", cfg.ListenAddr)
+	log.Printf("backend listening on %s", cfg.ListenAddr)
 	if err := router.Run(cfg.ListenAddr); err != nil {
-		log.Fatalf("gateway server failed: %v", err)
+		log.Fatalf("backend server failed: %v", err)
 	}
 }
 

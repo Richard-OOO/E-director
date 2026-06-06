@@ -1,10 +1,10 @@
-package mysql
+﻿package mysql
 
 import (
 	"context"
 	"errors"
 
-	"github.com/Richard-OOO/E-director/apps/gateway/internal/domain"
+	"github.com/Richard-OOO/E-director/apps/backend/internal/domain"
 	"gorm.io/gorm"
 )
 
@@ -59,3 +59,4 @@ func toDomainUser(user User) domain.User {
 		UpdatedAt:    user.UpdatedAt,
 	}
 }
+
