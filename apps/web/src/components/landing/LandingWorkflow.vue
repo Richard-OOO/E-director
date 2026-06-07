@@ -18,6 +18,7 @@ const props = defineProps<{
   processingDetail: string
   processingError: string
   streamedChapters: StreamedChapterPayload[]
+  saveStatus?: string
 }>()
 
 const emit = defineEmits<{
@@ -26,7 +27,12 @@ const emit = defineEmits<{
   (event: 'next-stage'): void
   (event: 'select-stage', stage: LandingStage): void
   (event: 'update-chapters', chapters: LandingChapter[]): void
+  (event: 'save-scene-yaml', sceneId: string, yaml: string): void
 }>()
+
+const forwardSaveSceneYAML = (sceneId: string, yaml: string) => {
+  emit('save-scene-yaml', sceneId, yaml)
+}
 </script>
 
 <template>
@@ -50,12 +56,18 @@ const emit = defineEmits<{
         :streamed-chapters="props.streamedChapters"
       />
 
-      <LandingEditorWorkspace
+      <div
         v-else-if="props.currentStage === 'editor' && props.chapters.some((chapter) => chapter.scenes.some((scene) => scene.yaml?.trim()))"
         key="editor"
-        :chapters="props.chapters"
-        @update-chapters="emit('update-chapters', $event)"
-      />
+        class="editor-stage-shell"
+      >
+        <LandingEditorWorkspace
+          :chapters="props.chapters"
+          @update-chapters="emit('update-chapters', $event)"
+          @save-scene-yaml="forwardSaveSceneYAML"
+        />
+        <div v-if="props.saveStatus" class="editor-save-status">{{ props.saveStatus }}</div>
+      </div>
 
       <LandingProcessingStage
         v-else-if="props.currentStage === 'editor'"

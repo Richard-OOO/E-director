@@ -11,6 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'update-yaml', value: string): void
+  (event: 'save-yaml', value: string): void
 }>()
 
 const draftYaml = ref(props.yaml ?? '')
@@ -27,15 +28,25 @@ const updateYaml = (event: Event) => {
   draftYaml.value = target.value
   emit('update-yaml', target.value)
 }
+
+const saveYaml = () => {
+  emit('save-yaml', draftYaml.value)
+}
 </script>
 
 <template>
   <div class="yaml-section" :id="props.id">
+    <div class="yaml-scene-toolbar">
+      <span>{{ props.num }}</span>
+      <strong>{{ props.title }}</strong>
+      <button class="yaml-save-button" type="button" @click.stop="saveYaml">Save</button>
+    </div>
     <textarea
       class="yaml-code yaml-code-editor"
       :value="draftYaml"
       spellcheck="false"
       @input="updateYaml"
+      @blur="saveYaml"
     ></textarea>
   </div>
 </template>

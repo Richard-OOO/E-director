@@ -8,11 +8,17 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'open-project', projectId: string): void
+  (event: 'delete-project', projectId: string): void
 }>()
 
 const patterns = ['pattern-dots', 'pattern-grid', 'pattern-lines'] as const
 
 const cardPattern = (index: number) => patterns[index % patterns.length]
+
+const deleteProject = (event: MouseEvent, projectId: string) => {
+  event.stopPropagation()
+  emit('delete-project', projectId)
+}
 </script>
 
 <template>
@@ -24,14 +30,19 @@ const cardPattern = (index: number) => patterns[index % patterns.length]
     </div>
 
     <div v-else class="archive-grid">
-      <button
+      <article
         v-for="(item, index) in props.items"
         :key="item.project_id"
         class="archive-card"
         :class="cardPattern(index)"
-        type="button"
         @click="emit('open-project', item.project_id)"
       >
+        <button class="archive-delete" type="button" aria-label="Delete project" @click="deleteProject($event, item.project_id)">×</button>
+        <div class="archive-art" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
         <div class="card-content">
           <span class="card-tag">{{ props.tag }}</span>
           <h3 class="card-title">{{ item.title }}</h3>
@@ -40,7 +51,7 @@ const cardPattern = (index: number) => patterns[index % patterns.length]
             <span>{{ item.status }} · {{ item.chapter_count }} ch · {{ item.scene_count }} sc</span>
           </div>
         </div>
-      </button>
+      </article>
     </div>
   </section>
 </template>

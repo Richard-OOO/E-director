@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 const props = defineProps<{
   activeView: 'new' | 'archive' | 'prompts'
   width: number
@@ -13,10 +15,14 @@ const emit = defineEmits<{
   (event: 'select-view', view: 'new' | 'archive' | 'prompts'): void
   (event: 'resize-start', mouseEvent: MouseEvent): void
 }>()
+
+const sidebarStyle = computed(() => ({
+  width: `${Math.max(72, props.width)}px`,
+}))
 </script>
 
 <template>
-  <aside class="main-sidebar" :style="{ width: props.width + 'px' }">
+  <aside class="main-sidebar" :class="{ collapsed: props.width <= 150 }" :style="sidebarStyle">
     <div class="resizer" @mousedown="emit('resize-start', $event)"></div>
     <div class="sidebar-logo">
       <span v-if="props.width > 150">E-DIRECTOR</span>

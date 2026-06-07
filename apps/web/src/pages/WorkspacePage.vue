@@ -6,11 +6,13 @@ import { useRoute, useRouter } from 'vue-router'
 import ArchiveGrid from '@/components/landing/ArchiveGrid.vue'
 import {
   createProject,
+  deleteProject,
   fetchMe,
   getProject,
   listProjects,
   logout as logoutSession,
   projectEventsUrl,
+  updateSceneYAML,
   type CreateProjectPayload,
   type GenerationEvent,
   type ProjectListItem,
@@ -46,6 +48,8 @@ const currentUser = ref<{ display_name: string; email: string } | null>(null)
 const archiveItems = ref<ProjectListItem[]>([])
 const editorChapters = ref<LandingChapter[]>([])
 const streamedChapters = ref<StreamedChapterPayload[]>([])
+const activeProjectId = ref('')
+const saveStatus = ref('')
 
 const stages = ['import', 'processing', 'editor', 'export'] as const
 const routeMap: Record<string, { view: LandingView; stage: LandingStage }> = {
@@ -143,6 +147,8 @@ const resetProcessingState = () => {
   processingDetail.value = 'Connecting to the generation event stream.'
   processingError.value = ''
   streamedChapters.value = []
+  activeProjectId.value = ''
+  saveStatus.value = ''
   editorChapters.value = []
 }
 
@@ -303,6 +309,7 @@ const subscribeProjectEvents = (projectId: string, jobId: string) => {
         const chapters = snapshotToLandingChapters(snapshot)
         debugLog('generation_completed mapped chapters', summarizeEditorChapters(chapters))
         if (hasLandingChapterYAML(chapters)) {
+          activeProjectId.value = projectId
           editorChapters.value = chapters
           view.value = 'new'
           selectWorkspaceStage('editor')
@@ -369,6 +376,7 @@ const nextStage = () => {
 const loadProjectIntoEditor = async (projectId: string) => {
   debugLog('loadProjectIntoEditor start', { projectId })
   const snapshot = await getProject(projectId)
+  activeProjectId.value = projectId
   debugLog('loadProjectIntoEditor snapshot', snapshot)
   editorChapters.value = snapshotToLandingChapters(snapshot)
   debugLog('loadProjectIntoEditor mapped chapters', summarizeEditorChapters(editorChapters.value))
@@ -383,6 +391,7 @@ const handleCreateProject = async (payload: CreateProjectPayload) => {
   debugLog('handleCreateProject start', { title: payload.title, language: payload.language, source_type: payload.source_type, hasFile: !!payload.file, contentLength: payload.content?.length ?? 0 })
   try {
     const result = await createProject(payload)
+    activeProjectId.value = result.project_id
     debugLog('createProject result', result)
     selectWorkspaceStage('processing')
     await refreshProjects()
@@ -412,6 +421,27 @@ const openProject = (id: string) => {
 
 const handleEditorChaptersUpdate = (chapters: LandingChapter[]) => {
   editorChapters.value = chapters
+}
+
+const handleSaveSceneYAML = async (sceneId: string, yaml: string) => {
+  if (!activeProjectId.value) return
+  saveStatus.value = 'Saving...'
+  try {
+    await updateSceneYAML(activeProjectId.value, sceneId, yaml)
+    saveStatus.value = 'Saved'
+    await refreshProjects()
+  } catch (error) {
+    saveStatus.value = error instanceof Error ? error.message : 'Save failed'
+  }
+}
+
+const handleDeleteProject = async (projectId: string) => {
+  await deleteProject(projectId)
+  if (activeProjectId.value === projectId) {
+    activeProjectId.value = ''
+    editorChapters.value = []
+  }
+  await refreshProjects()
 }
 
 watch(() => route.path, syncRouteState, { immediate: true })
@@ -485,15 +515,23 @@ onUnmounted(() => {
             :processing-detail="processingDetail"
             :processing-error="processingError"
             :streamed-chapters="streamedChapters"
+            :save-status="saveStatus"
             @create-project="handleCreateProject"
             @prev-stage="prevStage"
             @next-stage="nextStage"
             @select-stage="selectWorkspaceStage"
             @update-chapters="handleEditorChaptersUpdate"
+            @save-scene-yaml="handleSaveSceneYAML"
           />
         </section>
 
-        <ArchiveGrid v-else-if="view === 'archive'" :items="archiveItems" :tag="t.archive.tag" @open-project="openProject" />
+        <ArchiveGrid
+          v-else-if="view === 'archive'"
+          :items="archiveItems"
+          :tag="t.archive.tag"
+          @open-project="openProject"
+          @delete-project="handleDeleteProject"
+        />
 
         <PromptGrid v-else-if="view === 'prompts'" />
       </div>

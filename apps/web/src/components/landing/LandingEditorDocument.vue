@@ -12,6 +12,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'select-scene', sceneId: string): void
   (event: 'update-scene-yaml', sceneId: string, yaml: string): void
+  (event: 'save-scene-yaml', sceneId: string, yaml: string): void
 }>()
 
 const scrollToScene = (sceneId: string) => {
@@ -40,7 +41,11 @@ watch(
 <template>
   <div class="editor-scroll">
     <div class="yaml-document">
-      <template v-for="chapter in props.chapters" :key="chapter.id">
+      <section v-for="chapter in props.chapters" :key="chapter.id" :id="`chapter-${chapter.id}`" class="yaml-chapter-section">
+        <div class="yaml-chapter-heading">
+          <span>{{ chapter.num }}</span>
+          <h3>{{ chapter.title }}</h3>
+        </div>
         <LandingYamlScene
           v-for="scene in chapter.scenes"
           :key="scene.id"
@@ -53,8 +58,9 @@ watch(
           @focusin="emit('select-scene', scene.id)"
           @click="emit('select-scene', scene.id)"
           @update-yaml="emit('update-scene-yaml', scene.id, $event)"
+          @save-yaml="emit('save-scene-yaml', scene.id, $event)"
         />
-      </template>
+      </section>
     </div>
   </div>
 </template>
