@@ -18,22 +18,22 @@ func NewGenerationStore(db *gorm.DB) *GenerationStore {
 }
 
 type ProjectSnapshot struct {
-	Project  GenerationProject
-	Job      GenerationJob
-	Chapters []GenerationChapter
-	Scenes   []GenerationScene
+	Project  GenerationProject   `json:"project"`
+	Job      GenerationJob       `json:"job"`
+	Chapters []GenerationChapter `json:"chapters"`
+	Scenes   []GenerationScene   `json:"scenes"`
 }
 
 type ProjectListItem struct {
-	ProjectID    string
-	Title        string
-	Language     string
-	Status       string
-	ChapterCount int
-	SceneCount   int
-	CurrentJobID string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ProjectID    string    `json:"project_id"`
+	Title        string    `json:"title"`
+	Language     string    `json:"language"`
+	Status       string    `json:"status"`
+	ChapterCount int       `json:"chapter_count"`
+	SceneCount   int       `json:"scene_count"`
+	CurrentJobID string    `json:"current_job_id"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func (s *GenerationStore) CreateProject(ctx context.Context, project domain.GenerationProject) error {
