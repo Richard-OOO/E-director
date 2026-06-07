@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,12 +15,13 @@ import (
 )
 
 type ProjectStreamHandler struct {
-	auth   *AuthHandler
-	events *service.GenerationEventBus
+	auth    *AuthHandler
+	events  *service.GenerationEventBus
+	service *service.GenerationService
 }
 
-func NewProjectStreamHandler(auth *AuthHandler, events *service.GenerationEventBus) *ProjectStreamHandler {
-	return &ProjectStreamHandler{auth: auth, events: events}
+func NewProjectStreamHandler(auth *AuthHandler, events *service.GenerationEventBus, generationService *service.GenerationService) *ProjectStreamHandler {
+	return &ProjectStreamHandler{auth: auth, events: events, service: generationService}
 }
 
 func debugStreamEvent(event domain.GenerationEvent) {
@@ -44,15 +46,23 @@ func (h *ProjectStreamHandler) Stream(c *gin.Context) {
 	if !ok {
 		return
 	}
-	_ = user
-	if h.events == nil {
-		response.Error(c, http.StatusServiceUnavailable, 50001, "stream unavailable")
-		return
-	}
 	projectID := c.Param("project_id")
 	jobID := c.Query("job_id")
 	if projectID == "" || jobID == "" {
 		response.Error(c, http.StatusBadRequest, 40001, "missing project_id or job_id")
+		return
+	}
+	if h.service == nil {
+		response.Error(c, http.StatusServiceUnavailable, 50001, "storage unavailable")
+		return
+	}
+	snapshot, err := h.service.GetProject(c.Request.Context(), user.ID, projectID)
+	if err != nil {
+		writeStreamServiceError(c, err)
+		return
+	}
+	if snapshot.Project.CurrentJobID != jobID {
+		response.Error(c, http.StatusNotFound, 40401, "project or job not found")
 		return
 	}
 
@@ -125,4 +135,19 @@ func (h *ProjectStreamHandler) currentUser(c *gin.Context) (domain.User, bool) {
 		return domain.User{}, false
 	}
 	return user, true
+}
+
+func writeStreamServiceError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrInvalidInput):
+		response.Error(c, http.StatusBadRequest, 40001, "invalid input")
+	case errors.Is(err, service.ErrUnauthorized):
+		response.Error(c, http.StatusUnauthorized, 40100, "unauthorized")
+	case errors.Is(err, service.ErrNotFound):
+		response.Error(c, http.StatusNotFound, 40401, "project or job not found")
+	case errors.Is(err, service.ErrStorageUnavailable):
+		response.Error(c, http.StatusServiceUnavailable, 50001, "storage unavailable")
+	default:
+		response.Error(c, http.StatusInternalServerError, 50000, "internal server error")
+	}
 }

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -208,6 +209,43 @@ func (h *ProjectHandler) Delete(c *gin.Context) {
 	}
 	log.Printf("[e-director:project] delete ok user_id=%s project_id=%s", user.ID, projectID)
 	response.OK(c, gin.H{"project_id": projectID})
+}
+
+func (h *ProjectHandler) ExportYAML(c *gin.Context) {
+	user, ok := h.currentUser(c)
+	if !ok {
+		return
+	}
+	projectID := c.Param("project_id")
+	result, err := h.service.ExportProjectYAML(c.Request.Context(), user.ID, projectID)
+	if err != nil {
+		log.Printf("[e-director:project] export yaml failed user_id=%s project_id=%s err=%v", user.ID, projectID, err)
+		h.writeError(c, err)
+		return
+	}
+	h.writeYAMLExport(c, result)
+}
+
+func (h *ProjectHandler) ExportCombinedYAML(c *gin.Context) {
+	user, ok := h.currentUser(c)
+	if !ok {
+		return
+	}
+	projectID := c.Param("project_id")
+	result, err := h.service.ExportCombinedProjectYAML(c.Request.Context(), user.ID, projectID)
+	if err != nil {
+		log.Printf("[e-director:project] export combined yaml failed user_id=%s project_id=%s err=%v", user.ID, projectID, err)
+		h.writeError(c, err)
+		return
+	}
+	h.writeYAMLExport(c, result)
+}
+
+func (h *ProjectHandler) writeYAMLExport(c *gin.Context, result service.ExportProjectYAMLResult) {
+	c.Header("Content-Type", result.ContentType)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", result.Filename))
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Data(http.StatusOK, result.ContentType, result.Data)
 }
 
 func (h *ProjectHandler) currentUser(c *gin.Context) (domain.User, bool) {
