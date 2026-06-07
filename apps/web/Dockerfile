@@ -1,10 +1,3 @@
-
-FROM node:22-alpine
-
-EXPOSE 5173
-
-CMD ["sh", "-c", "echo 'E-director Vue Web placeholder container'; tail -f /dev/null"]
-
 FROM node:22-alpine AS build
 
 WORKDIR /app
@@ -20,6 +13,7 @@ FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 ENV WEB_ROOT=/app/dist
+ENV PORT=8080
 
 COPY --from=build /app/dist ./dist
 COPY server.mjs ./server.mjs
@@ -27,4 +21,3 @@ COPY server.mjs ./server.mjs
 EXPOSE 8080
 
 CMD ["node", "server.mjs"]
-

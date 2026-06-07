@@ -1,20 +1,33 @@
 services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: e-director-nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - gateway
+      - web
+    networks:
+      - e-director-net
+
   mysql:
     image: mysql:8.4
     container_name: e-director-mysql
     environment:
-      MYSQL_DATABASE: e_director
-      MYSQL_USER: e_director
-      MYSQL_PASSWORD: e_director
-      MYSQL_ROOT_PASSWORD: root
-    ports:
-      - "3306:3306"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-e_director}
+      MYSQL_USER: ${MYSQL_USER:-e_director}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-e_director}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    expose:
+      - "3306"
     volumes:
       - mysql-data:/var/lib/mysql
     networks:
       - e-director-net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
       interval: 5s
       timeout: 3s
       retries: 15
@@ -23,8 +36,8 @@ services:
     image: redis:7.2-alpine
     container_name: e-director-redis
     command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis-data:/data
     networks:
@@ -37,26 +50,38 @@ services:
 
   gateway:
     build:
-      context: ./apps/gateway
+      context: ./apps/backend
       dockerfile: Dockerfile
     container_name: e-director-gateway
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     environment:
-      APP_ENV: development
+      APP_ENV: production
       HTTP_PORT: "8080"
-      MYSQL_DSN: e_director:e_director@tcp(mysql:3306)/e_director?parseTime=true
+      MYSQL_DSN: ${MYSQL_USER:-e_director}:${MYSQL_PASSWORD:-e_director}@tcp(mysql:3306)/${MYSQL_DATABASE:-e_director}?parseTime=true&charset=utf8mb4&loc=Local
       REDIS_ADDR: redis:6379
       REDIS_DB: "0"
-      AI_WORKER_HTTP_ADDR: http://ai-worker:9000
-      CORS_ALLOWED_ORIGINS: http://localhost:5173
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      TOKEN_SECRET: ${TOKEN_SECRET:-change-me}
+      SMTP_HOST: ${SMTP_HOST:-smtp.qq.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-qwen-flash-2025-07-28}
+      OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-10000}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: mysql,redis,gateway,web,nginx,ai-worker,localhost,127.0.0.1
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
-      ai-worker:
-        condition: service_started
     networks:
       - e-director-net
 
@@ -65,12 +90,12 @@ services:
       context: ./apps/ai-worker
       dockerfile: Dockerfile
     container_name: e-director-ai-worker
-    ports:
-      - "9000:9000"
+    expose:
+      - "9000"
     environment:
-      APP_ENV: development
+      APP_ENV: production
       HTTP_PORT: "9000"
-      MYSQL_DSN: e_director:e_director@tcp(mysql:3306)/e_director?parseTime=true
+      MYSQL_DSN: ${MYSQL_USER:-e_director}:${MYSQL_PASSWORD:-e_director}@tcp(mysql:3306)/${MYSQL_DATABASE:-e_director}?parseTime=true&charset=utf8mb4&loc=Local
       REDIS_ADDR: redis:6379
       MAX_CONCURRENT_CHAPTERS: "3"
       MAX_CONCURRENT_SCENES: "6"
@@ -78,7 +103,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
-      NO_PROXY: mysql,redis,gateway,ai-worker,localhost,127.0.0.1
+      NO_PROXY: mysql,redis,gateway,web,nginx,ai-worker,localhost,127.0.0.1
     depends_on:
       mysql:
         condition: service_healthy
@@ -92,10 +117,11 @@ services:
       context: ./apps/web
       dockerfile: Dockerfile
     container_name: e-director-web
-    ports:
-      - "5173:5173"
+    expose:
+      - "8080"
     environment:
-      VITE_API_BASE_URL: http://localhost:8080
+      NODE_ENV: production
+      PORT: "8080"
     depends_on:
       - gateway
     networks:
