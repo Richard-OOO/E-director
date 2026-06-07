@@ -72,7 +72,7 @@ const handleSubmit = async () => {
     })
 
     statusMessage.value = t.value.register.success
-    await router.push('/workspace')
+    await router.push('/workspace/create')
   } catch (error) {
     statusMessage.value = error instanceof Error ? error.message : 'Register failed'
   } finally {
@@ -157,3 +157,4 @@ onBeforeUnmount(() => {
     </section>
   </main>
 </template>
+

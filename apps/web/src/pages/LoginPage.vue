@@ -30,7 +30,7 @@ const handleSubmit = async () => {
     })
 
     statusMessage.value = t.value.login.success
-    await router.push('/workspace')
+    await router.push('/workspace/create')
   } catch (error) {
     statusMessage.value = error instanceof Error ? error.message : 'Login failed'
   } finally {
@@ -80,3 +80,4 @@ const handleSubmit = async () => {
     </section>
   </main>
 </template>
+

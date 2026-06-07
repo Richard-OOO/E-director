@@ -12,7 +12,13 @@ const router = createRouter({
     { path: '/', name: 'landing', component: LandingPage },
     { path: '/login', name: 'login', component: LoginPage },
     { path: '/register', name: 'register', component: RegisterPage },
-    { path: '/workspace', name: 'workspace', component: WorkspacePage, meta: { requiresAuth: true } },
+    { path: '/workspace', redirect: '/workspace/create', meta: { requiresAuth: true } },
+    { path: '/workspace/create', name: 'workspace-create', component: WorkspacePage, meta: { requiresAuth: true } },
+    { path: '/workspace/progress', name: 'workspace-progress', component: WorkspacePage, meta: { requiresAuth: true } },
+    { path: '/workspace/editor', name: 'workspace-editor', component: WorkspacePage, meta: { requiresAuth: true } },
+    { path: '/workspace/export', name: 'workspace-export', component: WorkspacePage, meta: { requiresAuth: true } },
+    { path: '/workspace/history', name: 'workspace-history', component: WorkspacePage, meta: { requiresAuth: true } },
+    { path: '/workspace/prompts', name: 'workspace-prompts', component: WorkspacePage, meta: { requiresAuth: true } },
   ],
   scrollBehavior() {
     return { top: 0 }

@@ -339,6 +339,7 @@ a {
 .intro-layout h2 {
   margin-bottom: 18px;
   font-family: var(--serif);
+  font-size: 28px;
 }
 
 .card-import p,
@@ -463,6 +464,7 @@ a {
   overflow-y: auto;
   background: var(--paper);
   scroll-behavior: smooth;
+  padding-bottom: 160px;
 }
 
 .yaml-document {
@@ -658,7 +660,9 @@ a {
   overflow: hidden;
   padding: 40px;
   border: 1px solid var(--line);
+  border-radius: 999px;
   background: white;
+  color: var(--ink);
   cursor: pointer;
   transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -1015,6 +1019,23 @@ a {
   text-align: center;
 }
 
+.auth-footer-copy {
+  margin: 22px 0 0 !important;
+  color: var(--muted);
+  font-size: 14px !important;
+  text-align: center;
+}
+
+.auth-footer-copy a {
+  color: var(--coral);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.auth-footer-copy a:hover {
+  text-decoration: underline;
+}
+
 .workspace-screen {
   min-height: 80vh;
   padding-top: 80px;
@@ -1094,6 +1115,293 @@ a {
   text-align: center;
   text-transform: uppercase;
 }
+
+.workspace-layout-shell {
+  height: 100vh;
+  min-height: 100vh;
+}
+
+.landing-workflow-shell {
+  padding-bottom: 96px;
+}
+
+.landing-footer-bar {
+  position: absolute;
+  right: 24px;
+  bottom: 18px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(239, 231, 210, 0.88);
+  color: var(--muted);
+  font-size: 12px;
+  backdrop-filter: blur(12px);
+}
+
+.landing-footer-bar .btn-secondary {
+  min-width: auto;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+}
+
+.landing-import-form {
+  text-align: left;
+}
+
+.landing-import-form .meta,
+.processing-panel .meta,
+.landing-empty-state .meta,
+.yaml-tip-card .meta,
+.yaml-commentary-panel .meta {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--coral);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.landing-field {
+  display: block;
+  margin-top: 20px;
+}
+
+.landing-field span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.landing-field input,
+.landing-field select,
+.landing-source-zone textarea {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.45);
+  color: var(--ink);
+}
+
+.landing-source-zone {
+  display: block;
+  padding: 24px;
+}
+
+.landing-source-zone textarea {
+  min-height: 180px;
+  margin-top: 16px;
+  resize: vertical;
+  line-height: 1.7;
+}
+
+.landing-form-error {
+  margin: 16px 0 0;
+  color: var(--coral);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.landing-empty-state {
+  max-width: 520px;
+  margin: 64px auto;
+  padding: 40px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+  text-align: center;
+}
+
+.landing-empty-state h3 {
+  margin: 10px 0;
+  font-family: var(--serif);
+  font-size: 28px;
+}
+
+.landing-empty-state p {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.processing-detail {
+  margin-top: 8px !important;
+  color: var(--muted);
+  font-family: var(--sans) !important;
+  font-size: 13px !important;
+}
+
+.processing-steps {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.processing-steps span {
+  transition: color 0.2s ease;
+}
+
+.processing-steps span.active {
+  color: var(--coral);
+}
+
+.yaml-code-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.yaml-tip-shell {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.yaml-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 28px;
+  border: 1px solid var(--coral);
+  border-radius: 999px;
+  background: rgba(237, 111, 92, 0.12);
+  color: var(--coral);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.yaml-tip-card {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  z-index: 5;
+  width: 250px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 16px 16px 0 rgba(21, 20, 15, 0.06);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: all 0.18s ease;
+}
+
+.yaml-tip-shell:hover .yaml-tip-card,
+.yaml-tip-shell:focus-within .yaml-tip-card {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.yaml-tip-card strong {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--serif);
+  font-size: 18px;
+}
+
+.yaml-tip-card p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.yaml-commentary-panel {
+  position: absolute;
+  top: 72px;
+  right: 0;
+  z-index: 6;
+  width: 320px;
+  padding: 24px;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  background: white;
+  box-shadow: 20px 20px 0 rgba(21, 20, 15, 0.05);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px);
+  transition: all 0.25s ease;
+}
+
+.yaml-commentary-panel.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.yaml-commentary-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.yaml-commentary-panel h6 {
+  margin-bottom: 12px;
+  font-family: var(--serif);
+  font-size: 20px;
+}
+
+.yaml-commentary-panel p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.flow-nav-fixed {
+  position: fixed;
+  bottom: 28px;
+}
+
+@media (max-width: 768px) {
+  .landing-footer-bar {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    justify-content: space-between;
+  }
+
+  .yaml-tip-card,
+  .yaml-commentary-panel {
+    position: static;
+    width: auto;
+    margin-top: 12px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+    box-shadow: none;
+  }
+}
+
 
 @keyframes load {
   from {
