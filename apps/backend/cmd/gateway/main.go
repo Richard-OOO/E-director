@@ -25,6 +25,8 @@ func main() {
 
 	userStore := mysqlmodels.NewUserStore(db)
 	generationStore := mysqlmodels.NewGenerationStore(db)
+	promptStore := mysqlmodels.NewPromptStore(db)
+	promptService := service.NewPromptService(promptStore)
 	sessionStore := redismodels.NewSessionStore(rdb, cfg.SessionTTL)
 	codeStore := redismodels.NewVerificationCodeStoreWithLimits(rdb, cfg.VerificationTTL, cfg.CodeCooldown, cfg.CodeAttemptTTL)
 	mailer := service.NewSMTPMailer(service.SMTPConfig{
@@ -42,16 +44,18 @@ func main() {
 		Model:     cfg.OpenAIModel,
 		MaxTokens: cfg.OpenAIMaxTokens,
 	})
-	generationService := service.NewGenerationService(generationStore, service.NewChapterSplitter(), service.NewChapterPromptBuilder(), generator, eventBus)
+	generationService := service.NewGenerationService(generationStore, service.NewChapterSplitter(), service.NewChapterPromptBuilder(), generator, eventBus, promptService)
 	authHandler := handler.NewAuthHandler(authService, cfg)
 	projectHandler := handler.NewProjectHandler(authHandler, generationService, service.NewDocumentTextExtractor(), cfg.ImportMaxBytes)
-	projectStreamHandler := handler.NewProjectStreamHandler(authHandler, eventBus)
+	projectStreamHandler := handler.NewProjectStreamHandler(authHandler, eventBus, generationService)
+	promptHandler := handler.NewPromptHandler(authHandler, promptService)
 
 	router := server.NewRouter(cfg, server.Handlers{
 		System:        handler.NewSystemHandler(),
 		Auth:          authHandler,
 		Project:       projectHandler,
 		ProjectStream: projectStreamHandler,
+		Prompt:        promptHandler,
 	})
 
 	log.Printf("backend listening on %s", cfg.ListenAddr)

@@ -1,11 +1,15 @@
 package service
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -34,6 +38,7 @@ type GenerationService struct {
 	promptBuilder ChapterPromptBuilder
 	generator     ChapterGenerator
 	events        *GenerationEventBus
+	prompts       *PromptService
 }
 
 type CreateProjectInput struct {
@@ -57,8 +62,26 @@ type UpdateSceneYAMLInput struct {
 	YAML      string
 }
 
-func NewGenerationService(store GenerationStore, splitter ChapterSplitter, promptBuilder ChapterPromptBuilder, generator ChapterGenerator, events *GenerationEventBus) *GenerationService {
-	return &GenerationService{store: store, splitter: splitter, promptBuilder: promptBuilder, generator: generator, events: events}
+type ExportProjectYAMLResult struct {
+	Filename    string
+	ContentType string
+	Data        []byte
+	FileCount   int
+	Mode        string
+}
+
+type exportYAMLFile struct {
+	Name    string
+	Content string
+}
+
+const (
+	exportYAMLModeBatch    = "batch"
+	exportYAMLModeCombined = "combined"
+)
+
+func NewGenerationService(store GenerationStore, splitter ChapterSplitter, promptBuilder ChapterPromptBuilder, generator ChapterGenerator, events *GenerationEventBus, prompts *PromptService) *GenerationService {
+	return &GenerationService{store: store, splitter: splitter, promptBuilder: promptBuilder, generator: generator, events: events, prompts: prompts}
 }
 
 func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input CreateProjectInput) (CreateProjectResult, error) {
@@ -134,7 +157,12 @@ func (s *GenerationService) runProjectGeneration(ctx context.Context, project do
 	})
 
 	previousContext := ChapterCarryContext{}
+	systemPrompt, stylePrompt := s.generationPrompts(ctx, project.UserID)
 	for i, chapter := range chapters {
+		chapter.Status = domain.GenerationChapterProcessing
+		chapter.StartedAt = ptrTime(time.Now().UTC())
+		chapter.UpdatedAt = time.Now().UTC()
+		_ = s.store.UpdateChapterResult(ctx, chapter)
 		chapterProgress := domain.GenerationProgressPayload{
 			CompletedChapters: i,
 			TotalChapters:     len(chapters),
@@ -157,6 +185,8 @@ func (s *GenerationService) runProjectGeneration(ctx context.Context, project do
 				EnableCameraDirections: true,
 				EnableDialogues:        true,
 				EnableEmotionTags:      true,
+				SystemPromptOverride:   systemPrompt,
+				StylePrompt:            stylePrompt,
 			},
 		})
 		result, err := s.generator.GenerateChapter(ctx, prompt)
@@ -267,6 +297,67 @@ func (s *GenerationService) ListProjects(ctx context.Context, userID string) ([]
 	return s.store.ListProjects(ctx, userID)
 }
 
+func (s *GenerationService) ExportProjectYAML(ctx context.Context, userID, projectID string) (ExportProjectYAMLResult, error) {
+	if s.store == nil {
+		return ExportProjectYAMLResult{}, ErrStorageUnavailable
+	}
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(projectID) == "" {
+		return ExportProjectYAMLResult{}, ErrInvalidInput
+	}
+	snapshot, err := s.store.GetProjectSnapshot(ctx, userID, projectID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ExportProjectYAMLResult{}, ErrNotFound
+		}
+		return ExportProjectYAMLResult{}, err
+	}
+	files := exportYAMLFiles(snapshot)
+	if len(files) == 0 {
+		return ExportProjectYAMLResult{}, ErrInvalidInput
+	}
+	data, err := zipYAMLFiles(files)
+	if err != nil {
+		return ExportProjectYAMLResult{}, err
+	}
+	filename := safeDownloadName(snapshot.Project.Title, snapshot.Project.ID) + ".yaml.zip"
+	return ExportProjectYAMLResult{Filename: filename, ContentType: "application/zip", Data: data, FileCount: len(files), Mode: exportYAMLModeBatch}, nil
+}
+
+func (s *GenerationService) ExportCombinedProjectYAML(ctx context.Context, userID, projectID string) (ExportProjectYAMLResult, error) {
+	if s.store == nil {
+		return ExportProjectYAMLResult{}, ErrStorageUnavailable
+	}
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(projectID) == "" {
+		return ExportProjectYAMLResult{}, ErrInvalidInput
+	}
+	snapshot, err := s.store.GetProjectSnapshot(ctx, userID, projectID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ExportProjectYAMLResult{}, ErrNotFound
+		}
+		return ExportProjectYAMLResult{}, err
+	}
+	files := exportYAMLFiles(snapshot)
+	if len(files) == 0 {
+		return ExportProjectYAMLResult{}, ErrInvalidInput
+	}
+	combined := combineYAMLFiles(files)
+	filename := safeDownloadName(snapshot.Project.Title, snapshot.Project.ID) + ".yaml"
+	return ExportProjectYAMLResult{Filename: filename, ContentType: "text/yaml; charset=utf-8", Data: []byte(combined), FileCount: len(files), Mode: exportYAMLModeCombined}, nil
+}
+
+func (s *GenerationService) generationPrompts(ctx context.Context, userID string) (string, string) {
+	if s.prompts == nil {
+		return "", ""
+	}
+	systemPrompt, stylePrompt, err := s.prompts.GenerationPrompts(ctx, userID)
+	if err != nil {
+		fmt.Printf("[e-director:generation] load prompts failed user_id=%s err=%v\n", userID, err)
+		return "", ""
+	}
+	return systemPrompt, stylePrompt
+}
+
 func (s *GenerationService) publishGenerationEvent(eventType domain.GenerationEventType, projectID, jobID string, sequence int, payload any) {
 	if s.events == nil {
 		return
@@ -370,6 +461,78 @@ func (s *GenerationService) publishGenerationCompletedEvent(projectID, jobID str
 	}
 	payload := domain.GenerationProgressPayload{CompletedChapters: total, TotalChapters: total, OverallProgress: 100}
 	s.events.Publish(domain.GenerationEvent{EventID: newID("event", projectID, jobID, "completed"), EventType: domain.GenerationEventCompleted, ProjectID: projectID, JobID: jobID, Sequence: total, CreatedAt: time.Now().UTC(), Payload: payload})
+}
+
+func exportYAMLFiles(snapshot mysqlmodels.ProjectSnapshot) []exportYAMLFile {
+	files := make([]exportYAMLFile, 0, len(snapshot.Scenes))
+	chapterIndexes := make(map[string]int, len(snapshot.Chapters))
+	for _, chapter := range snapshot.Chapters {
+		chapterIndexes[chapter.ChapterID] = chapter.ChapterIndex
+	}
+	for _, scene := range snapshot.Scenes {
+		content := strings.TrimSpace(scene.EditableYAML)
+		if content == "" {
+			content = strings.TrimSpace(scene.GeneratedYAML)
+		}
+		if content == "" {
+			continue
+		}
+		chapterIndex := chapterIndexes[scene.ChapterID]
+		if chapterIndex <= 0 {
+			chapterIndex = 1
+		}
+		filename := fmt.Sprintf("chapter-%03d-scene-%03d.yaml", chapterIndex, scene.SceneIndex)
+		files = append(files, exportYAMLFile{Name: filename, Content: content + "\n"})
+	}
+	return files
+}
+
+func combineYAMLFiles(files []exportYAMLFile) string {
+	var builder strings.Builder
+	for i, file := range files {
+		if i > 0 {
+			builder.WriteString("\n---\n")
+		}
+		builder.WriteString("# ")
+		builder.WriteString(file.Name)
+		builder.WriteString("\n")
+		builder.WriteString(strings.TrimSpace(file.Content))
+		builder.WriteString("\n")
+	}
+	return builder.String()
+}
+
+func zipYAMLFiles(files []exportYAMLFile) ([]byte, error) {
+	var buf bytes.Buffer
+	writer := zip.NewWriter(&buf)
+	for _, file := range files {
+		entry, err := writer.Create(filepath.ToSlash(file.Name))
+		if err != nil {
+			_ = writer.Close()
+			return nil, err
+		}
+		if _, err := entry.Write([]byte(file.Content)); err != nil {
+			_ = writer.Close()
+			return nil, err
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+var unsafeDownloadNamePattern = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
+func safeDownloadName(title, fallback string) string {
+	name := strings.Trim(unsafeDownloadNamePattern.ReplaceAllString(strings.TrimSpace(title), "-"), "-._")
+	if name == "" {
+		name = strings.TrimSpace(fallback)
+	}
+	if name == "" {
+		name = "project"
+	}
+	return name
 }
 
 func (s *GenerationService) closeEventStream(projectID, jobID string) {
