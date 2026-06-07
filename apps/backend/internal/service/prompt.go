@@ -212,6 +212,9 @@ func (s *PromptService) ensureDefaultPrompts(ctx context.Context, userID string)
 			return err
 		}
 		if err := s.store.CreatePrompt(ctx, prompt); err != nil {
+			if _, existingErr := s.store.GetPromptByKey(ctx, userID, prompt.Key); existingErr == nil {
+				continue
+			}
 			return err
 		}
 	}

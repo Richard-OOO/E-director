@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/Richard-OOO/E-director/apps/backend/internal/domain"
-	mysqlmodels "github.com/Richard-OOO/E-director/apps/backend/internal/models/mysql"
 	"github.com/Richard-OOO/E-director/apps/backend/internal/response"
 	"github.com/Richard-OOO/E-director/apps/backend/internal/service"
 	"github.com/gin-gonic/gin"
@@ -35,26 +34,6 @@ type updateSceneYAMLRequest struct {
 
 func NewProjectHandler(auth *AuthHandler, generationService *service.GenerationService, extractor service.DocumentTextExtractor, importMaxBytes int64) *ProjectHandler {
 	return &ProjectHandler{auth: auth, service: generationService, extractor: extractor, importMaxBytes: importMaxBytes}
-}
-
-func debugProjectSnapshot(snapshot mysqlmodels.ProjectSnapshot) {
-	firstSceneEditableYAMLLen := 0
-	firstSceneGeneratedYAMLLen := 0
-	firstSceneDesignReasonYAMLLen := 0
-	if len(snapshot.Scenes) > 0 {
-		firstSceneEditableYAMLLen = len(snapshot.Scenes[0].EditableYAML)
-		firstSceneGeneratedYAMLLen = len(snapshot.Scenes[0].GeneratedYAML)
-		firstSceneDesignReasonYAMLLen = len(snapshot.Scenes[0].DesignReasonYAML)
-	}
-	log.Printf("[e-director:project] detail snapshot project_id=%s job_id=%s chapters=%d scenes=%d first_scene_editable_yaml_len=%d first_scene_generated_yaml_len=%d first_scene_design_reason_yaml_len=%d",
-		snapshot.Project.ID,
-		snapshot.Job.ID,
-		len(snapshot.Chapters),
-		len(snapshot.Scenes),
-		firstSceneEditableYAMLLen,
-		firstSceneGeneratedYAMLLen,
-		firstSceneDesignReasonYAMLLen,
-	)
 }
 
 func (h *ProjectHandler) Create(c *gin.Context) {
@@ -171,7 +150,6 @@ func (h *ProjectHandler) Detail(c *gin.Context) {
 		h.writeError(c, err)
 		return
 	}
-	debugProjectSnapshot(snapshot)
 	response.OK(c, snapshot)
 }
 
