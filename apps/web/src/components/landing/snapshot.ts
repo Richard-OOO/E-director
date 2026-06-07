@@ -1,38 +1,6 @@
 import type { ProjectSnapshot, ProjectSnapshotChapter, ProjectSnapshotScene, StreamedChapterPayload } from '@/auth'
 import type { LandingChapter, LandingScene } from '@/components/landing/types'
 
-const snapshotDebug = (label: string, payload: unknown) => {
-  console.debug(`[e-director:snapshot] ${label}`, payload)
-}
-
-const summarizeSnapshot = (snapshot: ProjectSnapshot) => ({
-  project_id: snapshot.project?.id,
-  chapter_count: snapshot.chapters?.length ?? 0,
-  scene_count: snapshot.scenes?.length ?? 0,
-  top_level_keys: Object.keys(snapshot),
-  first_chapter_keys: Object.keys(snapshot.chapters?.[0] ?? {}),
-  first_scene_keys: Object.keys(snapshot.scenes?.[0] ?? {}),
-  first_scene_yaml_lengths: {
-    editable_yaml: snapshot.scenes?.[0]?.editable_yaml?.length ?? 0,
-    generated_yaml: snapshot.scenes?.[0]?.generated_yaml?.length ?? 0,
-    design_reason_yaml: snapshot.scenes?.[0]?.design_reason_yaml?.length ?? 0,
-  },
-})
-
-const summarizeLandingChapters = (chapters: LandingChapter[]) => ({
-  chapter_count: chapters.length,
-  scene_count: chapters.reduce((sum, chapter) => sum + chapter.scenes.length, 0),
-  yaml_scene_count: chapters.reduce((sum, chapter) => sum + chapter.scenes.filter((scene) => scene.yaml?.trim()).length, 0),
-  first_chapter: chapters[0]
-    ? {
-        id: chapters[0].id,
-        title: chapters[0].title,
-        scene_count: chapters[0].scenes.length,
-        first_scene_yaml_length: chapters[0].scenes[0]?.yaml?.length ?? 0,
-      }
-    : null,
-})
-
 const getString = (value: unknown, fallback = '') => (typeof value === 'string' && value.trim() ? value : fallback)
 const getNumber = (value: unknown, fallback = 0) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback)
 
@@ -40,7 +8,6 @@ const chapterId = (chapter: ProjectSnapshotChapter, index: number) => getString(
 const sceneId = (scene: ProjectSnapshotScene, index: number) => getString(scene.scene_id ?? scene.id, `scene-${index + 1}`)
 
 export const snapshotToLandingChapters = (snapshot: ProjectSnapshot): LandingChapter[] => {
-  snapshotDebug('raw project snapshot', summarizeSnapshot(snapshot))
   const chapters = snapshot.chapters ?? []
   const flatScenes = snapshot.scenes ?? []
 
@@ -58,7 +25,6 @@ export const snapshotToLandingChapters = (snapshot: ProjectSnapshot): LandingCha
           intent: getString(scene.summary ?? scene.status),
           yaml: getString(scene.editable_yaml ?? scene.generated_yaml),
         }))
-        .filter((scene) => getString(scene.yaml))
 
       return {
         id,
@@ -68,9 +34,7 @@ export const snapshotToLandingChapters = (snapshot: ProjectSnapshot): LandingCha
         scenes,
       }
     })
-    .filter((chapter) => chapter.scenes.length > 0)
 
-  snapshotDebug('mapped project snapshot', summarizeLandingChapters(landingChapters))
   return landingChapters
 }
 
@@ -84,7 +48,6 @@ export const streamedChapterToLandingChapter = (chapter: StreamedChapterPayload,
       intent: getString(scene.summary),
       yaml: getString(scene.yaml_content),
     }))
-    .filter((scene) => getString(scene.yaml))
 
   return {
     id: getString(chapter.chapter_id, `streamed-chapter-${index + 1}`),
@@ -96,21 +59,9 @@ export const streamedChapterToLandingChapter = (chapter: StreamedChapterPayload,
 }
 
 export const streamedChaptersToLandingChapters = (chapters: StreamedChapterPayload[]): LandingChapter[] => {
-  snapshotDebug('raw streamed chapters', {
-    chapter_count: chapters.length,
-    chapters: chapters.map((chapter) => ({
-      chapter_id: chapter.chapter_id,
-      chapter_index: chapter.chapter_index,
-      scene_count: chapter.scenes?.length ?? 0,
-      yaml_lengths: chapter.scenes?.map((scene) => scene.yaml_content?.length ?? 0) ?? [],
-    })),
-  })
-
   const landingChapters = chapters
-    .filter((chapter) => (chapter.scenes ?? []).some((scene) => getString(scene.yaml_content)))
     .sort((a, b) => getNumber(a.chapter_index) - getNumber(b.chapter_index))
     .map(streamedChapterToLandingChapter)
 
-  snapshotDebug('mapped streamed chapters', summarizeLandingChapters(landingChapters))
   return landingChapters
 }

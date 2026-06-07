@@ -135,34 +135,6 @@ type SendCodeData = {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
-const debugLog = (label: string, payload: unknown) => {
-  console.debug(`[e-director:api] ${label}`, payload)
-}
-
-const sanitizeDebugValue = (value: unknown, depth = 0): unknown => {
-  if (depth > 4) return '[max depth]'
-  if (value instanceof File) return { name: value.name, size: value.size, type: value.type }
-  if (value instanceof FormData) {
-    return Array.from(value.entries()).reduce<Record<string, unknown>>((acc, [key, entry]) => {
-      acc[key] = sanitizeDebugValue(entry, depth + 1)
-      return acc
-    }, {})
-  }
-  if (Array.isArray(value)) return value.map((item) => sanitizeDebugValue(item, depth + 1))
-  if (value && typeof value === 'object') {
-    return Object.entries(value).reduce<Record<string, unknown>>((acc, [key, entry]) => {
-      const lowerKey = key.toLowerCase()
-      if (typeof entry === 'string' && (lowerKey.includes('source_text') || lowerKey === 'content' || lowerKey.includes('yaml'))) {
-        acc[key] = `[string length=${entry.length}]`
-        return acc
-      }
-      acc[key] = sanitizeDebugValue(entry, depth + 1)
-      return acc
-    }, {})
-  }
-  return value
-}
-
 export function apiUrl(path: string) {
   return `${apiBaseUrl}${path}`
 }
@@ -175,10 +147,8 @@ async function request<T>(path: string, options: RequestInit = {}) {
   }
 
   const url = apiUrl(path)
-  debugLog('request', { path, url, method: options.method ?? 'GET', body: sanitizeDebugValue(options.body) })
   const response = await fetch(url, { ...options, headers, credentials: 'include' })
   const result = (await response.json()) as ApiEnvelope<T>
-  debugLog('response', { path, url, status: response.status, ok: response.ok, result: sanitizeDebugValue(result) })
 
   if (!response.ok || result.code !== 200) {
     throw new Error(result.msg || 'Request failed')
