@@ -7,8 +7,8 @@ export const landingDemoChapters: LandingChapter[] = [
     title: 'The Silent Threshold',
     open: true,
     scenes: [
-      { id: 's1', num: '01', title: 'Arrival at the Gate', intent: 'Establish Isolation', comment: 'Use a tight 50mm lens. The AI will prioritize deep shadows to emphasize character solitude.' },
-      { id: 's2', num: '02', title: 'The First Encounter', intent: 'Create Tension', comment: 'Slow dolly zoom during the reveal. Maintain a cold color grade.' },
+      { id: 's1', num: '01', title: 'Arrival at the Gate', intent: 'Establish Isolation' },
+      { id: 's2', num: '02', title: 'The First Encounter', intent: 'Create Tension' },
     ],
   },
   {
@@ -16,7 +16,7 @@ export const landingDemoChapters: LandingChapter[] = [
     num: 'CH. 02',
     title: 'Echoes of the Past',
     open: false,
-    scenes: [{ id: 's3', num: '03', title: 'Memory Corridor', intent: 'Surreal Flashback', comment: 'Soft focus edges. The AI suggests a higher frame rate (60fps).' }],
+    scenes: [{ id: 's3', num: '03', title: 'Memory Corridor', intent: 'Surreal Flashback' }],
   },
 ]
 

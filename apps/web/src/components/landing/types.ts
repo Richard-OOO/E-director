@@ -7,7 +7,6 @@ export type LandingScene = {
   num: string
   title: string
   intent: string
-  comment: string
   yaml?: string
 }
 

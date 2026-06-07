@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CreateProjectPayload } from '@/auth'
+import type { CreateProjectPayload, StreamedChapterPayload } from '@/auth'
 import LandingEditorWorkspace from '@/components/landing/LandingEditorWorkspace.vue'
 import LandingExportStage from '@/components/landing/LandingExportStage.vue'
 import LandingImportStage from '@/components/landing/LandingImportStage.vue'
@@ -17,6 +17,7 @@ const props = defineProps<{
   processingStatus: string
   processingDetail: string
   processingError: string
+  streamedChapters: StreamedChapterPayload[]
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +25,7 @@ const emit = defineEmits<{
   (event: 'prev-stage'): void
   (event: 'next-stage'): void
   (event: 'select-stage', stage: LandingStage): void
+  (event: 'update-chapters', chapters: LandingChapter[]): void
 }>()
 </script>
 
@@ -45,9 +47,25 @@ const emit = defineEmits<{
         :status-text="props.processingStatus"
         :detail-text="props.processingDetail"
         :error-message="props.processingError"
+        :streamed-chapters="props.streamedChapters"
       />
 
-      <LandingEditorWorkspace v-else-if="props.currentStage === 'editor'" key="editor" :chapters="props.chapters" />
+      <LandingEditorWorkspace
+        v-else-if="props.currentStage === 'editor' && props.chapters.some((chapter) => chapter.scenes.some((scene) => scene.yaml?.trim()))"
+        key="editor"
+        :chapters="props.chapters"
+        @update-chapters="emit('update-chapters', $event)"
+      />
+
+      <LandingProcessingStage
+        v-else-if="props.currentStage === 'editor'"
+        key="editor-waiting"
+        :progress="props.processingProgress"
+        :status-text="props.processingStatus"
+        :detail-text="props.processingDetail"
+        :error-message="props.processingError"
+        :streamed-chapters="props.streamedChapters"
+      />
 
       <LandingExportStage v-else-if="props.currentStage === 'export'" key="export" />
     </transition>

@@ -14,7 +14,8 @@ export type CreateProjectPayload = {
   title: string
   language: string
   source_type: string
-  content: string
+  content?: string
+  file?: File
 }
 
 export type CreateProjectResult = {
@@ -37,82 +38,77 @@ export type ProjectListItem = {
 
 export type ProjectSnapshotProject = {
   id?: string
-  ID?: string
   user_id?: string
-  UserID?: string
   title?: string
-  Title?: string
   language?: string
-  Language?: string
   source_type?: string
-  SourceType?: string
   source_text?: string
-  SourceText?: string
+  source_text_hash?: string
   chapter_count?: number
-  ChapterCount?: number
   current_job_id?: string
-  CurrentJobID?: string
   created_at?: string
-  CreatedAt?: string
   updated_at?: string
-  UpdatedAt?: string
 }
 
 export type ProjectSnapshotJob = Record<string, unknown>
 
 export type ProjectSnapshotChapter = {
   id?: string
-  ID?: string
+  job_id?: string
+  project_id?: string
   chapter_id?: string
-  ChapterID?: string
   chapter_index?: number
-  ChapterIndex?: number
   title?: string
-  Title?: string
   content?: string
-  Content?: string
+  content_hash?: string
   summary?: string
-  Summary?: string
   status?: string
-  Status?: string
   scene_count?: number
-  SceneCount?: number
-  design_note_y_a_m_l?: string
-  DesignNoteYAML?: string
+  completed_scene_count?: number
+  failed_scene_count?: number
+  design_note_yaml?: string
+  error_code?: string
+  error_message?: string
+  retryable?: boolean
+  started_at?: string
+  finished_at?: string
+  created_at?: string
+  updated_at?: string
 }
 
 export type ProjectSnapshotScene = {
   id?: string
-  ID?: string
+  job_id?: string
+  project_id?: string
+  chapter_record_id?: string
   chapter_id?: string
-  ChapterID?: string
   scene_id?: string
-  SceneID?: string
   scene_index?: number
-  SceneIndex?: number
   title?: string
-  Title?: string
   summary?: string
-  Summary?: string
   status?: string
-  Status?: string
-  generated_y_a_m_l?: string
-  GeneratedYAML?: string
-  editable_y_a_m_l?: string
-  EditableYAML?: string
-  design_reason_y_a_m_l?: string
-  DesignReasonYAML?: string
+  generated_yaml?: string
+  editable_yaml?: string
+  design_reason_yaml?: string
+  yaml_hash?: string
+  is_edited?: boolean
+  edited_by_user_id?: string
+  edited_at?: string
+  generation_started_at?: string
+  generation_finished_at?: string
+  error_code?: string
+  error_message?: string
+  retryable?: boolean
+  retry_count?: number
+  created_at?: string
+  updated_at?: string
 }
 
 export type ProjectSnapshot = {
   project?: ProjectSnapshotProject
-  Project?: ProjectSnapshotProject
   job?: ProjectSnapshotJob
-  Job?: ProjectSnapshotJob
   chapters?: ProjectSnapshotChapter[]
-  Chapters?: ProjectSnapshotChapter[]
   scenes?: ProjectSnapshotScene[]
-  Scenes?: ProjectSnapshotScene[]
 }
 
 type AuthData = {
@@ -126,6 +122,34 @@ type SendCodeData = {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
+const debugLog = (label: string, payload: unknown) => {
+  console.debug(`[e-director:api] ${label}`, payload)
+}
+
+const sanitizeDebugValue = (value: unknown, depth = 0): unknown => {
+  if (depth > 4) return '[max depth]'
+  if (value instanceof File) return { name: value.name, size: value.size, type: value.type }
+  if (value instanceof FormData) {
+    return Array.from(value.entries()).reduce<Record<string, unknown>>((acc, [key, entry]) => {
+      acc[key] = sanitizeDebugValue(entry, depth + 1)
+      return acc
+    }, {})
+  }
+  if (Array.isArray(value)) return value.map((item) => sanitizeDebugValue(item, depth + 1))
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce<Record<string, unknown>>((acc, [key, entry]) => {
+      const lowerKey = key.toLowerCase()
+      if (typeof entry === 'string' && (lowerKey.includes('source_text') || lowerKey === 'content' || lowerKey.includes('yaml'))) {
+        acc[key] = `[string length=${entry.length}]`
+        return acc
+      }
+      acc[key] = sanitizeDebugValue(entry, depth + 1)
+      return acc
+    }, {})
+  }
+  return value
+}
+
 export function apiUrl(path: string) {
   return `${apiBaseUrl}${path}`
 }
@@ -133,12 +157,15 @@ export function apiUrl(path: string) {
 async function request<T>(path: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers)
 
-  if (!headers.has('Content-Type') && options.body) {
+  if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
   }
 
-  const response = await fetch(apiUrl(path), { ...options, headers, credentials: 'include' })
+  const url = apiUrl(path)
+  debugLog('request', { path, url, method: options.method ?? 'GET', body: sanitizeDebugValue(options.body) })
+  const response = await fetch(url, { ...options, headers, credentials: 'include' })
   const result = (await response.json()) as ApiEnvelope<T>
+  debugLog('response', { path, url, status: response.status, ok: response.ok, result: sanitizeDebugValue(result) })
 
   if (!response.ok || result.code !== 200) {
     throw new Error(result.msg || 'Request failed')
@@ -175,6 +202,18 @@ export const logout = () => {
 export const fetchMe = () => request<AuthUser>('/api/v1/auth/me')
 
 export const createProject = (payload: CreateProjectPayload) => {
+  if (payload.file) {
+    const formData = new FormData()
+    formData.set('title', payload.title)
+    formData.set('language', payload.language)
+    formData.set('source_type', payload.source_type)
+    formData.set('file', payload.file)
+    return request<CreateProjectResult>('/api/v1/projects', {
+      method: 'POST',
+      body: formData,
+    })
+  }
+
   return request<CreateProjectResult>('/api/v1/projects', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -186,6 +225,38 @@ export const listProjects = () => request<{ projects: ProjectListItem[] }>('/api
 export const getProject = (projectId: string) => request<ProjectSnapshot>(`/api/v1/projects/${encodeURIComponent(projectId)}`)
 
 export type GenerationEventPayload = Record<string, unknown>
+
+export type GenerationDesignReason = {
+  reason_id?: string
+  target_path?: string
+  field_name?: string
+  reason_type?: string
+  title?: string
+  description?: string
+  hover_text?: string
+}
+
+export type StreamedChapterScene = {
+  scene_id: string
+  scene_index: number
+  title: string
+  summary: string
+  yaml_content: string
+  design_reasons: GenerationDesignReason[]
+}
+
+export type StreamedChapterPayload = GenerationEventPayload & {
+  chapter_id: string
+  chapter_title: string
+  chapter_index: number
+  chapter_summary?: string
+  chapter_schema_design_note?: {
+    summary?: string
+    key_reasons?: Array<{ field_name?: string; reason?: string }>
+  }
+  carry_context_summary?: string
+  scenes?: StreamedChapterScene[]
+}
 
 export type GenerationEvent = {
   event_id: string
