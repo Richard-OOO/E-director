@@ -224,6 +224,17 @@ export const listProjects = () => request<{ projects: ProjectListItem[] }>('/api
 
 export const getProject = (projectId: string) => request<ProjectSnapshot>(`/api/v1/projects/${encodeURIComponent(projectId)}`)
 
+export const updateSceneYAML = (projectId: string, sceneId: string, yaml: string) => {
+  return request<{ scene_id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(sceneId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ yaml }),
+  })
+}
+
+export const deleteProject = (projectId: string) => {
+  return request<{ project_id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' })
+}
+
 export type GenerationEventPayload = Record<string, unknown>
 
 export type GenerationDesignReason = {

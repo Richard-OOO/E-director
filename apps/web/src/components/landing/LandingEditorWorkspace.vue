@@ -11,6 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'update-chapters', chapters: LandingChapter[]): void
+  (event: 'save-scene-yaml', sceneId: string, yaml: string): void
 }>()
 
 const chapters = ref<LandingChapter[]>(props.chapters)
@@ -19,8 +20,13 @@ const activeScene = ref(chapters.value[0]?.scenes[0]?.id ?? '')
 const sceneIds = computed(() => chapters.value.flatMap((chapter) => chapter.scenes.map((scene) => scene.id)))
 
 const selectScene = (sceneId: string) => {
-  if (!sceneIds.value.includes(sceneId) || activeScene.value === sceneId) return
+  if (!sceneIds.value.includes(sceneId)) return
   activeScene.value = sceneId
+}
+
+const selectChapter = (chapterId: string) => {
+  const firstScene = chapters.value.find((chapter) => chapter.id === chapterId)?.scenes[0]
+  if (firstScene) selectScene(firstScene.id)
 }
 
 const updateSceneYaml = (sceneId: string, yaml: string) => {
@@ -31,6 +37,10 @@ const updateSceneYaml = (sceneId: string, yaml: string) => {
     scenes: chapter.scenes.map((scene) => (scene.id === sceneId ? { ...scene, yaml } : scene)),
   }))
   emit('update-chapters', chapters.value)
+}
+
+const saveSceneYaml = (sceneId: string, yaml: string) => {
+  emit('save-scene-yaml', sceneId, yaml)
 }
 
 watch(
@@ -48,12 +58,18 @@ watch(
 
 <template>
   <section class="workspace">
-    <LandingEditorOutline :chapters="chapters" :active-scene="activeScene" @select-scene="selectScene" />
+    <LandingEditorOutline
+      :chapters="chapters"
+      :active-scene="activeScene"
+      @select-chapter="selectChapter"
+      @select-scene="selectScene"
+    />
     <LandingEditorDocument
       :chapters="chapters"
       :active-scene="activeScene"
       @select-scene="selectScene"
       @update-scene-yaml="updateSceneYaml"
+      @save-scene-yaml="saveSceneYaml"
     />
   </section>
 </template>

@@ -7,6 +7,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (event: 'select-chapter', chapterId: string): void
   (event: 'select-scene', sceneId: string): void
 }>()
 </script>
@@ -14,12 +15,16 @@ const emit = defineEmits<{
 <template>
   <aside class="sidebar-editor">
     <h3 class="panel-title">Outline</h3>
+    <div class="outline-status">
+      <span class="ai-export-dot"></span>
+      <span>AI exporting</span>
+    </div>
     <div class="chapter-list">
-      <div v-for="chapter in props.chapters" :key="chapter.id">
-        <div class="chapter-header">
+      <div v-for="chapter in props.chapters" :key="chapter.id" class="outline-chapter-block">
+        <button class="chapter-header" type="button" @click="emit('select-chapter', chapter.id)">
           <span>{{ chapter.num }} · {{ chapter.title }}</span>
-          <span class="chapter-toggle">{{ chapter.open ? '−' : '+' }}</span>
-        </div>
+          <span class="chapter-toggle">↴</span>
+        </button>
         <div class="scene-list">
           <button
             v-for="scene in chapter.scenes"
@@ -29,7 +34,8 @@ const emit = defineEmits<{
             type="button"
             @click="emit('select-scene', scene.id)"
           >
-            {{ scene.num }} {{ scene.title }}
+            <span class="scene-item-num">{{ scene.num }}</span>
+            <span class="scene-item-title">{{ scene.title }}</span>
           </button>
         </div>
       </div>
