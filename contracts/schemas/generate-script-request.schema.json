@@ -9,14 +9,19 @@
     "session_id": { "type": "string", "minLength": 1 },
     "novel": {
       "type": "object",
-      "required": ["title", "language", "source_type", "content"],
+      "required": ["title", "language", "source_type"],
       "properties": {
         "title": { "type": "string", "minLength": 1 },
         "language": { "type": "string", "enum": ["zh-CN", "en-US"] },
-        "source_type": { "type": "string", "enum": ["plain_text"] },
-        "content": { "type": "string", "minLength": 1000 },
+        "source_type": { "type": "string", "enum": ["plain_text", "docx", "pdf"] },
+        "content": { "type": "string", "minLength": 1 },
+        "file_name": { "type": "string", "minLength": 1 },
         "chapter_count_hint": { "type": "integer", "minimum": 3 }
       },
+      "oneOf": [
+        { "required": ["content"] },
+        { "required": ["file_name"] }
+      ],
       "additionalProperties": false
     },
     "generation_config": {
@@ -43,7 +48,7 @@
         "enable_emotion_tags": { "type": "boolean" },
         "max_concurrent_chapters": { "type": "integer", "minimum": 1, "maximum": 8 },
         "max_concurrent_scenes": { "type": "integer", "minimum": 1, "maximum": 20 },
-        "stream_mode": { "type": "string", "enum": ["scene_delta"] }
+        "stream_mode": { "type": "string", "enum": ["scene_delta", "chapter"] }
       },
       "additionalProperties": false
     },

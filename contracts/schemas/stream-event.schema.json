@@ -3,7 +3,7 @@
   "$id": "https://e-director.local/contracts/stream-event.schema.json",
   "title": "StreamEvent",
   "type": "object",
-  "required": ["event_id", "event_type", "project_id", "job_id", "session_id", "sequence", "created_at", "payload"],
+  "required": ["event_id", "event_type", "project_id", "job_id", "sequence", "created_at", "payload"],
   "properties": {
     "event_id": { "type": "string", "minLength": 1 },
     "event_type": {
@@ -23,9 +23,56 @@
     "project_id": { "type": "string", "minLength": 1 },
     "job_id": { "type": "string", "minLength": 1 },
     "session_id": { "type": "string", "minLength": 1 },
-    "sequence": { "type": "integer", "minimum": 1 },
+    "sequence": { "type": "integer", "minimum": 0 },
     "created_at": { "type": "string", "format": "date-time" },
-    "payload": { "type": "object" }
+    "payload": {
+      "type": "object",
+      "properties": {
+        "chapter_id": { "type": "string" },
+        "chapter_title": { "type": "string" },
+        "chapter_index": { "type": "integer", "minimum": 0 },
+        "status": { "type": "string" },
+        "chapter_summary": { "type": "string" },
+        "carry_context_summary": { "type": "string" },
+        "chapter_schema_design_note": {
+          "type": "object",
+          "properties": {
+            "summary": { "type": "string" },
+            "key_reasons": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "field_name": { "type": "string" },
+                  "reason": { "type": "string" }
+                },
+                "additionalProperties": true
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "scenes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["scene_id", "scene_index", "title", "summary", "yaml_content"],
+            "properties": {
+              "scene_id": { "type": "string", "minLength": 1 },
+              "scene_index": { "type": "integer", "minimum": 1 },
+              "title": { "type": "string" },
+              "summary": { "type": "string" },
+              "yaml_content": { "type": "string" },
+              "design_reasons": { "type": "array", "items": { "type": "object" } }
+            },
+            "additionalProperties": true
+          }
+        },
+        "progress": { "type": "object" },
+        "error": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
   },
   "additionalProperties": false
 }
