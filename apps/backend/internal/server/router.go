@@ -34,6 +34,8 @@ func NewRouter(cfg config.Config, handlers Handlers) *gin.Engine {
 	projects.POST("", handlers.Project.Create)
 	projects.GET("", handlers.Project.List)
 	projects.GET("/:project_id", handlers.Project.Detail)
+	projects.PATCH("/:project_id/scenes/:scene_id", handlers.Project.UpdateSceneYAML)
+	projects.DELETE("/:project_id", handlers.Project.Delete)
 	projects.GET("/:project_id/events", handlers.ProjectStream.Stream)
 
 	return router

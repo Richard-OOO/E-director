@@ -28,6 +28,10 @@ type createProjectRequest struct {
 	Content    string `json:"content"`
 }
 
+type updateSceneYAMLRequest struct {
+	YAML string `json:"yaml"`
+}
+
 func NewProjectHandler(auth *AuthHandler, generationService *service.GenerationService, extractor service.DocumentTextExtractor, importMaxBytes int64) *ProjectHandler {
 	return &ProjectHandler{auth: auth, service: generationService, extractor: extractor, importMaxBytes: importMaxBytes}
 }
@@ -170,6 +174,42 @@ func (h *ProjectHandler) Detail(c *gin.Context) {
 	response.OK(c, snapshot)
 }
 
+func (h *ProjectHandler) UpdateSceneYAML(c *gin.Context) {
+	user, ok := h.currentUser(c)
+	if !ok {
+		return
+	}
+	projectID := c.Param("project_id")
+	sceneID := c.Param("scene_id")
+	var payload updateSceneYAMLRequest
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		h.writeError(c, service.ErrInvalidInput)
+		return
+	}
+	if err := h.service.UpdateSceneYAML(c.Request.Context(), service.UpdateSceneYAMLInput{UserID: user.ID, ProjectID: projectID, SceneID: sceneID, YAML: payload.YAML}); err != nil {
+		log.Printf("[e-director:project] update scene yaml failed user_id=%s project_id=%s scene_id=%s yaml_len=%d err=%v", user.ID, projectID, sceneID, len(payload.YAML), err)
+		h.writeError(c, err)
+		return
+	}
+	log.Printf("[e-director:project] update scene yaml ok user_id=%s project_id=%s scene_id=%s yaml_len=%d", user.ID, projectID, sceneID, len(payload.YAML))
+	response.OK(c, gin.H{"scene_id": sceneID})
+}
+
+func (h *ProjectHandler) Delete(c *gin.Context) {
+	user, ok := h.currentUser(c)
+	if !ok {
+		return
+	}
+	projectID := c.Param("project_id")
+	if err := h.service.DeleteProject(c.Request.Context(), user.ID, projectID); err != nil {
+		log.Printf("[e-director:project] delete failed user_id=%s project_id=%s err=%v", user.ID, projectID, err)
+		h.writeError(c, err)
+		return
+	}
+	log.Printf("[e-director:project] delete ok user_id=%s project_id=%s", user.ID, projectID)
+	response.OK(c, gin.H{"project_id": projectID})
+}
+
 func (h *ProjectHandler) currentUser(c *gin.Context) (domain.User, bool) {
 	if h.auth == nil || h.auth.service == nil {
 		response.Error(c, http.StatusServiceUnavailable, 50001, "storage unavailable")
@@ -194,6 +234,8 @@ func (h *ProjectHandler) writeError(c *gin.Context, err error) {
 		response.Error(c, http.StatusBadRequest, 40003, "document contains no extractable text")
 	case errors.Is(err, service.ErrUnauthorized):
 		response.Error(c, http.StatusUnauthorized, 40100, "unauthorized")
+	case errors.Is(err, service.ErrNotFound):
+		response.Error(c, http.StatusNotFound, 40401, "project or scene not found")
 	case errors.Is(err, service.ErrStorageUnavailable):
 		response.Error(c, http.StatusServiceUnavailable, 50001, "storage unavailable")
 	default:

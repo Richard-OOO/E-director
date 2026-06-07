@@ -2,6 +2,8 @@ package mysql
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -180,6 +182,56 @@ func (s *GenerationStore) CreateScenes(ctx context.Context, scenes []domain.Gene
 		return nil
 	}
 	return s.db.WithContext(ctx).Create(&rows).Error
+}
+
+func (s *GenerationStore) UpdateSceneYAML(ctx context.Context, userID, projectID, sceneID, yaml string) error {
+	var project GenerationProject
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", projectID, userID).First(&project).Error; err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	result := s.db.WithContext(ctx).
+		Model(&GenerationScene{}).
+		Where("project_id = ? AND scene_id = ?", projectID, sceneID).
+		Updates(map[string]any{
+			"editable_yaml":     yaml,
+			"yaml_hash":         hashYAML(yaml),
+			"is_edited":         true,
+			"edited_by_user_id": userID,
+			"edited_at":         &now,
+			"updated_at":        now,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return s.db.WithContext(ctx).Model(&GenerationProject{}).Where("id = ?", projectID).Update("updated_at", now).Error
+}
+
+func (s *GenerationStore) DeleteProject(ctx context.Context, userID, projectID string) error {
+	var project GenerationProject
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", projectID, userID).First(&project).Error; err != nil {
+		return err
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ?", projectID).Delete(&GenerationScene{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ?", projectID).Delete(&GenerationChapter{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ?", projectID).Delete(&GenerationJob{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("id = ? AND user_id = ?", projectID, userID).Delete(&GenerationProject{}).Error
+	})
+}
+
+func hashYAML(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
 
 func (s *GenerationStore) GetProjectSnapshot(ctx context.Context, userID, projectID string) (ProjectSnapshot, error) {

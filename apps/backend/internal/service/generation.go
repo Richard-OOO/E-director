@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/Richard-OOO/E-director/apps/backend/internal/domain"
 	mysqlmodels "github.com/Richard-OOO/E-director/apps/backend/internal/models/mysql"
+	"gorm.io/gorm"
 )
 
 type GenerationStore interface {
@@ -20,6 +22,8 @@ type GenerationStore interface {
 	UpdateJobStatus(ctx context.Context, jobID string, status domain.GenerationJobStatus) error
 	UpdateChapterResult(ctx context.Context, chapter domain.GenerationChapter) error
 	CreateScenes(ctx context.Context, scenes []domain.GenerationScene) error
+	UpdateSceneYAML(ctx context.Context, userID, projectID, sceneID, yaml string) error
+	DeleteProject(ctx context.Context, userID, projectID string) error
 	GetProjectSnapshot(ctx context.Context, userID, projectID string) (mysqlmodels.ProjectSnapshot, error)
 	ListProjects(ctx context.Context, userID string) ([]mysqlmodels.ProjectListItem, error)
 }
@@ -44,6 +48,13 @@ type CreateProjectResult struct {
 	ProjectID string
 	JobID     string
 	Status    domain.GenerationJobStatus
+}
+
+type UpdateSceneYAMLInput struct {
+	UserID    string
+	ProjectID string
+	SceneID   string
+	YAML      string
 }
 
 func NewGenerationService(store GenerationStore, splitter ChapterSplitter, promptBuilder ChapterPromptBuilder, generator ChapterGenerator, events *GenerationEventBus) *GenerationService {
@@ -215,6 +226,38 @@ func (s *GenerationService) GetProject(ctx context.Context, userID, projectID st
 		return mysqlmodels.ProjectSnapshot{}, ErrStorageUnavailable
 	}
 	return s.store.GetProjectSnapshot(ctx, userID, projectID)
+}
+
+func (s *GenerationService) UpdateSceneYAML(ctx context.Context, input UpdateSceneYAMLInput) error {
+	if s.store == nil {
+		return ErrStorageUnavailable
+	}
+	if strings.TrimSpace(input.UserID) == "" || strings.TrimSpace(input.ProjectID) == "" || strings.TrimSpace(input.SceneID) == "" || strings.TrimSpace(input.YAML) == "" {
+		return ErrInvalidInput
+	}
+	if err := s.store.UpdateSceneYAML(ctx, input.UserID, input.ProjectID, input.SceneID, input.YAML); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *GenerationService) DeleteProject(ctx context.Context, userID, projectID string) error {
+	if s.store == nil {
+		return ErrStorageUnavailable
+	}
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(projectID) == "" {
+		return ErrInvalidInput
+	}
+	if err := s.store.DeleteProject(ctx, userID, projectID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *GenerationService) ListProjects(ctx context.Context, userID string) ([]mysqlmodels.ProjectListItem, error) {
