@@ -1,7 +1,9 @@
 package config
 
 import (
+	"bufio"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +32,8 @@ type Config struct {
 }
 
 func Load() Config {
+	loadDotEnv()
+
 	return Config{
 		ListenAddr:      listenAddr(),
 		FrontendOrigins: splitCSV(getenvFallback("CORS_ALLOWED_ORIGINS", getenvFallback("FRONTEND_ORIGIN", "http://localhost:5173"))),
@@ -51,6 +55,70 @@ func Load() Config {
 		SMTPPassword:    os.Getenv("SMTP_PASSWORD"),
 		SMTPFrom:        getenvFallback("SMTP_FROM", os.Getenv("SMTP_USERNAME")),
 	}
+}
+
+func loadDotEnv() {
+	for _, path := range dotenvCandidates() {
+		if loadDotEnvFile(path) == nil {
+			return
+		}
+	}
+}
+
+func dotenvCandidates() []string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return []string{".env"}
+	}
+
+	candidates := []string{filepath.Join(cwd, ".env")}
+	for dir := cwd; ; {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		candidates = append(candidates, filepath.Join(parent, ".env"))
+		dir = parent
+	}
+	return candidates
+}
+
+func loadDotEnvFile(path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key == "" || os.Getenv(key) != "" {
+			continue
+		}
+		os.Setenv(key, trimEnvValue(value))
+	}
+	return scanner.Err()
+}
+
+func trimEnvValue(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 {
+		quote := value[0]
+		if (quote == '\'' || quote == '"') && value[len(value)-1] == quote {
+			return value[1 : len(value)-1]
+		}
+	}
+	return value
 }
 
 func listenAddr() string {

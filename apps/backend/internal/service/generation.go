@@ -108,6 +108,12 @@ func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input Cre
 	if err := s.store.CreateChapters(ctx, chapters); err != nil {
 		return CreateProjectResult{}, err
 	}
+	go s.runProjectGeneration(context.Background(), project, jobID, chapters)
+	return CreateProjectResult{ProjectID: projectID, JobID: jobID, Status: domain.GenerationJobChapterProcessing}, nil
+}
+
+func (s *GenerationService) runProjectGeneration(ctx context.Context, project domain.GenerationProject, jobID string, chapters []domain.GenerationChapter) {
+	projectID := project.ID
 	_ = s.store.UpdateJobStatus(ctx, jobID, domain.GenerationJobChapterProcessing)
 	s.publishGenerationEvent(domain.GenerationEventStarted, projectID, jobID, 0, map[string]any{
 		"project_id":    projectID,
@@ -150,7 +156,7 @@ func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input Cre
 			_ = s.store.UpdateJobStatus(ctx, jobID, domain.GenerationJobFailed)
 			s.publishFailureEvent(projectID, jobID, chapter, err, i, len(chapters))
 			s.closeEventStream(projectID, jobID)
-			return CreateProjectResult{}, err
+			return
 		}
 		chapter.Status = domain.GenerationChapterCompleted
 		chapter.Summary = result.ChapterSummary
@@ -160,8 +166,12 @@ func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input Cre
 		chapter.FinishedAt = ptrTime(time.Now().UTC())
 		chapter.UpdatedAt = time.Now().UTC()
 		if err := s.store.UpdateChapterResult(ctx, chapter); err != nil {
-			return CreateProjectResult{}, err
+			_ = s.store.UpdateJobStatus(ctx, jobID, domain.GenerationJobFailed)
+			s.publishFailureEvent(projectID, jobID, chapter, err, i, len(chapters))
+			s.closeEventStream(projectID, jobID)
+			return
 		}
+		now := time.Now().UTC()
 		scenes := make([]domain.GenerationScene, 0, len(result.Scenes))
 		for _, scene := range result.Scenes {
 			scenes = append(scenes, domain.GenerationScene{
@@ -184,7 +194,10 @@ func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input Cre
 			})
 		}
 		if err := s.store.CreateScenes(ctx, scenes); err != nil {
-			return CreateProjectResult{}, err
+			_ = s.store.UpdateJobStatus(ctx, jobID, domain.GenerationJobFailed)
+			s.publishFailureEvent(projectID, jobID, chapter, err, i, len(chapters))
+			s.closeEventStream(projectID, jobID)
+			return
 		}
 		previousContext = result.CarryContext
 		s.publishChapterCompletedEvent(projectID, jobID, chapter, result, i+1, len(chapters))
@@ -192,7 +205,6 @@ func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input Cre
 	_ = s.store.UpdateJobStatus(ctx, jobID, domain.GenerationJobCompleted)
 	s.publishGenerationCompletedEvent(projectID, jobID, len(chapters))
 	s.closeEventStream(projectID, jobID)
-	return CreateProjectResult{ProjectID: projectID, JobID: jobID, Status: domain.GenerationJobCompleted}, nil
 }
 
 func (s *GenerationService) GetProject(ctx context.Context, userID, projectID string) (mysqlmodels.ProjectSnapshot, error) {
