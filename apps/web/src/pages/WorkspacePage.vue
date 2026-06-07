@@ -7,6 +7,8 @@ import ArchiveGrid from '@/components/landing/ArchiveGrid.vue'
 import {
   createProject,
   deleteProject,
+  exportCombinedProjectYAML,
+  exportProjectYAML,
   fetchMe,
   getProject,
   listProjects,
@@ -50,6 +52,10 @@ const editorChapters = ref<LandingChapter[]>([])
 const streamedChapters = ref<StreamedChapterPayload[]>([])
 const activeProjectId = ref('')
 const saveStatus = ref('')
+const isExporting = ref(false)
+const exportingMode = ref<'batch' | 'combined' | ''>('')
+const exportStatus = ref('')
+const isGenerationFinished = ref(false)
 
 const stages = ['import', 'processing', 'editor', 'export'] as const
 const routeMap: Record<string, { view: LandingView; stage: LandingStage }> = {
@@ -113,7 +119,15 @@ const hasLandingChapterYAML = (chapters: LandingChapter[]) => {
 }
 
 const selectWorkspaceStage = (stage: LandingStage) => {
-  debugLog('selectWorkspaceStage requested', { stage, currentStage: currentStage.value, editorChapters: summarizeEditorChapters(editorChapters.value) })
+  debugLog('selectWorkspaceStage requested', { stage, currentStage: currentStage.value, editorChapters: summarizeEditorChapters(editorChapters.value), isGenerationFinished: isGenerationFinished.value })
+  if (stage === 'export' && !isGenerationFinished.value) {
+    debugLog('selectWorkspaceStage blocked export', { reason: 'generation is not finished' })
+    currentStage.value = 'processing'
+    view.value = 'new'
+    processingDetail.value = 'Please wait until all chapters finish generating before exporting YAML.'
+    void router.push('/workspace/progress')
+    return
+  }
   if (stage === 'editor' && !hasLandingChapterYAML(editorChapters.value)) {
     debugLog('selectWorkspaceStage blocked editor', { reason: 'no editor YAML yet' })
     currentStage.value = 'processing'
@@ -149,6 +163,8 @@ const resetProcessingState = () => {
   streamedChapters.value = []
   activeProjectId.value = ''
   saveStatus.value = ''
+  exportStatus.value = ''
+  isGenerationFinished.value = false
   editorChapters.value = []
 }
 
@@ -172,6 +188,104 @@ const progressFromPayload = (payload: Record<string, unknown>, fallback: number)
   return Math.max(0, Math.min(100, Math.round(progress)))
 }
 
+type StreamedScene = NonNullable<StreamedChapterPayload['scenes']>[number]
+
+const statusRank = (status?: string) => {
+  const normalized = status?.toLowerCase().replace(/_/g, '-')
+  if (!normalized) return 0
+  if (normalized.includes('failed') || normalized.includes('error')) return 5
+  if (normalized.includes('completed') || normalized.includes('done')) return 4
+  if (normalized.includes('processing') || normalized.includes('running') || normalized.includes('started')) return 3
+  if (normalized.includes('pending')) return 1
+  return 2
+}
+
+const mergedStatus = (incoming: string, existing?: string) => {
+  if (!existing) return incoming
+  if (!incoming) return existing
+  return statusRank(incoming) >= statusRank(existing) ? incoming : existing
+}
+
+const normalizeScene = (scene: unknown, index: number, existing?: StreamedScene): StreamedScene => {
+  const raw = typeof scene === 'object' && scene !== null ? (scene as Record<string, unknown>) : {}
+  const designReasons = Array.isArray(raw.design_reasons) ? raw.design_reasons : existing?.design_reasons ?? []
+  const sceneIndex = payloadNumber(raw, 'scene_index', existing?.scene_index ?? index + 1)
+  const yamlContent = payloadString(raw, 'yaml_content', payloadString(raw, 'editable_yaml', payloadString(raw, 'generated_yaml', payloadString(raw, 'yaml', existing?.yaml_content ?? ''))))
+  return {
+    scene_id: payloadString(raw, 'scene_id', existing?.scene_id ?? `scene-${sceneIndex}`),
+    scene_index: sceneIndex,
+    title: payloadString(raw, 'title', payloadString(raw, 'scene_title', existing?.title || `Scene ${sceneIndex}`)),
+    summary: payloadString(raw, 'summary', payloadString(raw, 'scene_summary', existing?.summary || payloadString(raw, 'status'))),
+    yaml_content: yamlContent,
+    design_reasons: designReasons,
+  }
+}
+
+const mergeScenes = (existingScenes: StreamedScene[] = [], incomingScenes: unknown[] = []) => {
+  const merged = [...existingScenes]
+  incomingScenes.forEach((scene, index) => {
+    const raw = typeof scene === 'object' && scene !== null ? (scene as Record<string, unknown>) : {}
+    const sceneId = payloadString(raw, 'scene_id')
+    const sceneIndex = payloadNumber(raw, 'scene_index')
+    const existingIndex = merged.findIndex((item) => (sceneId && item.scene_id === sceneId) || (sceneIndex > 0 && item.scene_index === sceneIndex))
+    const normalized = normalizeScene(scene, index, existingIndex >= 0 ? merged[existingIndex] : undefined)
+    if (existingIndex >= 0) {
+      merged.splice(existingIndex, 1, normalized)
+      return
+    }
+    merged.push(normalized)
+  })
+  return merged.sort((a, b) => (a.scene_index || 0) - (b.scene_index || 0))
+}
+
+const mergeProgress = (payload: Record<string, unknown>, existing?: StreamedChapterPayload) => {
+  const incoming = typeof payload.progress === 'object' && payload.progress !== null ? (payload.progress as StreamedChapterPayload['progress']) : undefined
+  if (!incoming) return existing?.progress
+  return { ...(existing?.progress ?? {}), ...incoming }
+}
+
+const scenePayloadToChapterPatch = (payload: Record<string, unknown>, status: string) => {
+  const chapterId = payloadString(payload, 'chapter_id')
+  if (!chapterId) return null
+  const sceneIndex = payloadNumber(payload, 'scene_index', 1)
+  return {
+    ...payload,
+    status: payloadString(payload, 'chapter_status', 'processing'),
+    scenes: [
+      {
+        ...payload,
+        status,
+        scene_index: sceneIndex,
+        scene_id: payloadString(payload, 'scene_id', `scene-${sceneIndex}`),
+      },
+    ],
+  }
+}
+
+const normalizeStreamedChapter = (payload: Record<string, unknown>, existing?: StreamedChapterPayload): StreamedChapterPayload | null => {
+  const chapterId = payloadString(payload, 'chapter_id', existing?.chapter_id ?? '')
+  if (!chapterId) return null
+  const chapterIndex = payloadNumber(payload, 'chapter_index', existing?.chapter_index ?? streamedChapters.value.length + 1)
+  const incomingScenes = Array.isArray(payload.scenes) ? payload.scenes : []
+  const scenes = incomingScenes.length ? mergeScenes(existing?.scenes ?? [], incomingScenes) : existing?.scenes ?? []
+  const rawDesignNote = typeof payload.chapter_schema_design_note === 'object' && payload.chapter_schema_design_note !== null ? (payload.chapter_schema_design_note as StreamedChapterPayload['chapter_schema_design_note']) : existing?.chapter_schema_design_note
+  const incomingStatus = payloadString(payload, 'status')
+
+  return {
+    ...(existing ?? {}),
+    ...payload,
+    chapter_id: chapterId,
+    chapter_title: payloadString(payload, 'chapter_title', existing?.chapter_title || `Chapter ${chapterIndex}`),
+    chapter_index: chapterIndex,
+    status: mergedStatus(incomingStatus, existing?.status) || 'processing',
+    chapter_summary: payloadString(payload, 'chapter_summary', existing?.chapter_summary ?? ''),
+    chapter_schema_design_note: rawDesignNote,
+    carry_context_summary: payloadString(payload, 'carry_context_summary', existing?.carry_context_summary ?? ''),
+    progress: mergeProgress(payload, existing),
+    scenes,
+  }
+}
+
 const upsertStreamedChapter = (payload: Record<string, unknown>) => {
   const chapterId = payloadString(payload, 'chapter_id')
   debugLog('upsertStreamedChapter', {
@@ -181,8 +295,9 @@ const upsertStreamedChapter = (payload: Record<string, unknown>) => {
     yamlLengths: Array.isArray(payload.scenes) ? payload.scenes.map((scene) => (typeof scene === 'object' && scene !== null && typeof (scene as Record<string, unknown>).yaml_content === 'string' ? ((scene as Record<string, string>).yaml_content.length) : 0)) : [],
   })
   if (!chapterId) return
-  const chapter = payload as StreamedChapterPayload
   const existingIndex = streamedChapters.value.findIndex((item) => item.chapter_id === chapterId)
+  const chapter = normalizeStreamedChapter(payload, existingIndex >= 0 ? streamedChapters.value[existingIndex] : undefined)
+  if (!chapter) return
   if (existingIndex >= 0) {
     streamedChapters.value.splice(existingIndex, 1, chapter)
     debugLog('streamedChapters updated existing', summarizeStreamedChapters(streamedChapters.value))
@@ -212,8 +327,8 @@ const isFirstChapterReady = () => {
 
 const syncStreamedChaptersToEditor = () => {
   debugLog('syncStreamedChaptersToEditor start', summarizeStreamedChapters(streamedChapters.value))
-  if (!isFirstChapterReady()) {
-    debugLog('syncStreamedChaptersToEditor blocked', { reason: 'first chapter has no YAML yet' })
+  if (!streamedChapters.value.some(hasGeneratedSceneYAML)) {
+    debugLog('syncStreamedChaptersToEditor blocked', { reason: 'no chapter has YAML yet' })
     return
   }
   const chapters = streamedChaptersToLandingChapters(streamedChapters.value)
@@ -245,9 +360,23 @@ const updateProcessingFromEvent = (event: GenerationEvent) => {
   }
 
   if (event.event_type === 'chapter_started') {
+    upsertStreamedChapter(payload)
     processingProgress.value = Math.max(8, progressFromPayload(progressPayload, processingProgress.value))
     processingStatus.value = chapterTitle ? `Generating ${chapterTitle}` : 'Generating chapter YAML'
     processingDetail.value = totalChapters > 0 ? `Chapter ${chapterIndex || completedChapters + 1} of ${totalChapters} is running.` : 'The model is building scene structure and design notes.'
+    return
+  }
+
+  if (event.event_type === 'scene_started' || event.event_type === 'scene_delta' || event.event_type === 'scene_completed') {
+    const scenePatch = scenePayloadToChapterPatch(payload, event.event_type.replace('scene_', ''))
+    if (scenePatch) upsertStreamedChapter(scenePatch)
+    if (event.event_type === 'scene_completed') syncStreamedChaptersToEditor()
+    processingProgress.value = Math.max(processingProgress.value, progressFromPayload(progressPayload, processingProgress.value))
+    const sceneIndex = payloadNumber(payload, 'scene_index')
+    const sceneTitle = payloadString(payload, 'scene_title', payloadString(payload, 'title'))
+    const sceneLabel = sceneTitle || (sceneIndex ? `Scene ${sceneIndex}` : 'Scene')
+    processingStatus.value = chapterTitle ? `${sceneLabel} in ${chapterTitle}` : `${sceneLabel} is updating`
+    processingDetail.value = event.event_type === 'scene_completed' ? 'A scene YAML block has been generated and merged into the chapter card.' : 'Scene-level generation updates are streaming into the chapter card.'
     return
   }
 
@@ -268,6 +397,7 @@ const updateProcessingFromEvent = (event: GenerationEvent) => {
   }
 
   if (event.event_type === 'generation_completed') {
+    isGenerationFinished.value = true
     processingProgress.value = 100
     processingStatus.value = 'Generation completed'
     processingDetail.value = 'Loading the generated editor workspace.'
@@ -310,6 +440,7 @@ const subscribeProjectEvents = (projectId: string, jobId: string) => {
         debugLog('generation_completed mapped chapters', summarizeEditorChapters(chapters))
         if (hasLandingChapterYAML(chapters)) {
           activeProjectId.value = projectId
+          isGenerationFinished.value = true
           editorChapters.value = chapters
           view.value = 'new'
           selectWorkspaceStage('editor')
@@ -329,7 +460,7 @@ const subscribeProjectEvents = (projectId: string, jobId: string) => {
     }
   }
 
-  const eventTypes = ['generation_started', 'chapter_started', 'schema_summary', 'chapter_completed', 'generation_completed', 'generation_failed']
+  const eventTypes = ['generation_started', 'chapter_started', 'scene_started', 'scene_delta', 'scene_completed', 'schema_summary', 'chapter_completed', 'generation_completed', 'generation_failed']
   eventTypes.forEach((eventType) => {
     projectEventSource?.addEventListener(eventType, (message) => {
       void handleEvent(message as MessageEvent<string>)
@@ -377,6 +508,7 @@ const loadProjectIntoEditor = async (projectId: string) => {
   debugLog('loadProjectIntoEditor start', { projectId })
   const snapshot = await getProject(projectId)
   activeProjectId.value = projectId
+  isGenerationFinished.value = true
   debugLog('loadProjectIntoEditor snapshot', snapshot)
   editorChapters.value = snapshotToLandingChapters(snapshot)
   debugLog('loadProjectIntoEditor mapped chapters', summarizeEditorChapters(editorChapters.value))
@@ -432,6 +564,42 @@ const handleSaveSceneYAML = async (sceneId: string, yaml: string) => {
     await refreshProjects()
   } catch (error) {
     saveStatus.value = error instanceof Error ? error.message : 'Save failed'
+  }
+}
+
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+const handleExportYAML = async (mode: 'batch' | 'combined' = 'batch') => {
+  if (!activeProjectId.value) {
+    exportStatus.value = 'Open or generate a project before exporting YAML.'
+    return
+  }
+  if (!isGenerationFinished.value) {
+    exportStatus.value = 'Please wait until all chapters finish generating before exporting YAML.'
+    selectWorkspaceStage('processing')
+    return
+  }
+  isExporting.value = true
+  exportingMode.value = mode
+  exportStatus.value = mode === 'combined' ? 'Preparing combined YAML file...' : 'Preparing YAML package...'
+  try {
+    const { blob, filename } = mode === 'combined' ? await exportCombinedProjectYAML(activeProjectId.value) : await exportProjectYAML(activeProjectId.value)
+    downloadBlob(blob, filename)
+    exportStatus.value = `Downloaded ${filename}`
+  } catch (error) {
+    exportStatus.value = error instanceof Error ? error.message : 'Export failed'
+  } finally {
+    isExporting.value = false
+    exportingMode.value = ''
   }
 }
 
@@ -516,12 +684,18 @@ onUnmounted(() => {
             :processing-error="processingError"
             :streamed-chapters="streamedChapters"
             :save-status="saveStatus"
+            :active-project-id="activeProjectId"
+            :is-exporting="isExporting"
+            :exporting-mode="exportingMode"
+            :export-status="exportStatus"
+            :can-export-yaml="isGenerationFinished && !!activeProjectId && hasLandingChapterYAML(editorChapters)"
             @create-project="handleCreateProject"
             @prev-stage="prevStage"
             @next-stage="nextStage"
             @select-stage="selectWorkspaceStage"
             @update-chapters="handleEditorChaptersUpdate"
             @save-scene-yaml="handleSaveSceneYAML"
+            @export-yaml="handleExportYAML"
           />
         </section>
 
