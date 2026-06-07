@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -19,6 +20,23 @@ type ProjectStreamHandler struct {
 
 func NewProjectStreamHandler(auth *AuthHandler, events *service.GenerationEventBus) *ProjectStreamHandler {
 	return &ProjectStreamHandler{auth: auth, events: events}
+}
+
+func debugStreamEvent(event domain.GenerationEvent) {
+	log.Printf("[e-director:stream] event project_id=%s job_id=%s type=%s sequence=%d", event.ProjectID, event.JobID, event.EventType, event.Sequence)
+	if event.EventType != domain.GenerationEventChapterCompleted {
+		return
+	}
+	payload, ok := event.Payload.(domain.ChapterCompletedPayload)
+	if !ok {
+		log.Printf("[e-director:stream] chapter_completed payload type mismatch project_id=%s job_id=%s payload_type=%T", event.ProjectID, event.JobID, event.Payload)
+		return
+	}
+	lengths := make([]int, 0, len(payload.Scenes))
+	for _, scene := range payload.Scenes {
+		lengths = append(lengths, len(scene.YAMLContent))
+	}
+	log.Printf("[e-director:stream] chapter_completed project_id=%s job_id=%s chapter_id=%s chapter_index=%d scenes=%d yaml_content_lengths=%v", event.ProjectID, event.JobID, payload.ChapterID, payload.ChapterIndex, len(payload.Scenes), lengths)
 }
 
 func (h *ProjectStreamHandler) Stream(c *gin.Context) {
@@ -84,6 +102,7 @@ func (h *ProjectStreamHandler) Stream(c *gin.Context) {
 			if !ok {
 				return
 			}
+			debugStreamEvent(event)
 			if err := writeEvent(string(event.EventType), event); err != nil {
 				return
 			}

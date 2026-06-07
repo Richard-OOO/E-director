@@ -36,9 +36,15 @@ func main() {
 	})
 	authService := service.NewAuthService(userStore, sessionStore, codeStore, service.WithMailer(mailer), service.WithMaxCodeAttempts(cfg.CodeMaxAttempts))
 	eventBus := service.NewGenerationEventBus()
-	generationService := service.NewGenerationService(generationStore, service.NewChapterSplitter(), service.NewChapterPromptBuilder(), service.NewMockChapterGenerator(), eventBus)
+	generator := service.NewOpenAIChapterGenerator(service.OpenAIChapterGeneratorConfig{
+		BaseURL:   cfg.OpenAIAPIBase,
+		APIKey:    cfg.OpenAIAPIKey,
+		Model:     cfg.OpenAIModel,
+		MaxTokens: cfg.OpenAIMaxTokens,
+	})
+	generationService := service.NewGenerationService(generationStore, service.NewChapterSplitter(), service.NewChapterPromptBuilder(), generator, eventBus)
 	authHandler := handler.NewAuthHandler(authService, cfg)
-	projectHandler := handler.NewProjectHandler(authHandler, generationService)
+	projectHandler := handler.NewProjectHandler(authHandler, generationService, service.NewDocumentTextExtractor(), cfg.ImportMaxBytes)
 	projectStreamHandler := handler.NewProjectStreamHandler(authHandler, eventBus)
 
 	router := server.NewRouter(cfg, server.Handlers{

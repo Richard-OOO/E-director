@@ -29,6 +29,11 @@ type Config struct {
 	SMTPUsername    string
 	SMTPPassword    string
 	SMTPFrom        string
+	OpenAIAPIBase   string
+	OpenAIAPIKey    string
+	OpenAIModel     string
+	OpenAIMaxTokens int
+	ImportMaxBytes  int64
 }
 
 func Load() Config {
@@ -54,6 +59,11 @@ func Load() Config {
 		SMTPUsername:    os.Getenv("SMTP_USERNAME"),
 		SMTPPassword:    os.Getenv("SMTP_PASSWORD"),
 		SMTPFrom:        getenvFallback("SMTP_FROM", os.Getenv("SMTP_USERNAME")),
+		OpenAIAPIBase:   getenvFallback("OPENAI_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+		OpenAIAPIKey:    getenvFallback("OPENAI_API_KEY", os.Getenv("DASHSCOPE_API_KEY")),
+		OpenAIModel:     getenvFallback("OPENAI_MODEL", "qwen-flash-2025-07-28"),
+		OpenAIMaxTokens: getenvIntDefault("OPENAI_MAX_TOKENS", 10000),
+		ImportMaxBytes:  getenvInt64Default("IMPORT_MAX_BYTES", 20<<20),
 	}
 }
 
@@ -153,6 +163,15 @@ func getenvFallback(key, fallback string) string {
 func getenvIntDefault(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return fallback
+}
+
+func getenvInt64Default(key string, fallback int64) int64 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
 			return n
 		}
 	}

@@ -58,19 +58,20 @@ func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input Cre
 		return CreateProjectResult{}, ErrInvalidInput
 	}
 	now := time.Now().UTC()
-	projectID := newID("project", input.UserID, input.Title, input.Content)
-	jobID := newID("job", projectID, input.Title)
+	projectID := newID("project", input.UserID, input.Title, input.Content, now.Format(time.RFC3339Nano))
+	jobID := newID("job", projectID, input.Title, now.Format(time.RFC3339Nano))
 	project := domain.GenerationProject{
-		ID:           projectID,
-		UserID:       input.UserID,
-		Title:        strings.TrimSpace(input.Title),
-		Language:     defaultString(input.Language, "zh-CN"),
-		SourceType:   defaultString(input.SourceType, "plain_text"),
-		SourceText:   input.Content,
-		ChapterCount: 0,
-		CurrentJobID: jobID,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:             projectID,
+		UserID:         input.UserID,
+		Title:          strings.TrimSpace(input.Title),
+		Language:       defaultString(input.Language, "zh-CN"),
+		SourceType:     defaultString(input.SourceType, "plain_text"),
+		SourceTextHash: hashText(input.Content),
+		SourceText:     input.Content,
+		ChapterCount:   0,
+		CurrentJobID:   jobID,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	job := domain.GenerationJob{
 		ID:                     jobID,
@@ -80,8 +81,8 @@ func (s *GenerationService) CreateProjectAndStart(ctx context.Context, input Cre
 		SchemaVersion:          "1.0",
 		TargetFormat:           "yaml",
 		SceneGranularity:       "medium",
-		EnableDynamicSchema:    true,
-		EnableDesignReasons:    true,
+		EnableDynamicSchema:    false,
+		EnableDesignReasons:    false,
 		EnableCameraDirections: true,
 		EnableDialogues:        true,
 		EnableEmotionTags:      true,
@@ -141,7 +142,7 @@ func (s *GenerationService) runProjectGeneration(ctx context.Context, project do
 			Config: ChapterPromptConfig{
 				TargetFormat:           "yaml",
 				SceneGranularity:       "medium",
-				EnableDesignReasons:    true,
+				EnableDesignReasons:    false,
 				EnableCameraDirections: true,
 				EnableDialogues:        true,
 				EnableEmotionTags:      true,
@@ -149,6 +150,7 @@ func (s *GenerationService) runProjectGeneration(ctx context.Context, project do
 		})
 		result, err := s.generator.GenerateChapter(ctx, prompt)
 		if err != nil {
+			fmt.Printf("[e-director:generation] GenerateChapter failed project_id=%s job_id=%s chapter_id=%s err=%v\n", projectID, jobID, chapter.ChapterID, err)
 			chapter.Status = domain.GenerationChapterFailed
 			chapter.ErrorMessage = err.Error()
 			chapter.UpdatedAt = time.Now().UTC()
@@ -187,7 +189,7 @@ func (s *GenerationService) runProjectGeneration(ctx context.Context, project do
 				Status:           domain.GenerationSceneCompleted,
 				GeneratedYAML:    scene.YAMLContent,
 				EditableYAML:     scene.YAMLContent,
-				DesignReasonYAML: renderDesignReasonsYAML(scene.DesignReasons),
+				DesignReasonYAML: "",
 				YAMLHash:         hashText(scene.YAMLContent),
 				CreatedAt:        now,
 				UpdatedAt:        now,
@@ -200,6 +202,7 @@ func (s *GenerationService) runProjectGeneration(ctx context.Context, project do
 			return
 		}
 		previousContext = result.CarryContext
+		s.publishSchemaSummaryEvent(projectID, jobID, chapter, result, i+1)
 		s.publishChapterCompletedEvent(projectID, jobID, chapter, result, i+1, len(chapters))
 	}
 	_ = s.store.UpdateJobStatus(ctx, jobID, domain.GenerationJobCompleted)
@@ -240,20 +243,63 @@ func (s *GenerationService) publishChapterCompletedEvent(projectID, jobID string
 	if s.events == nil {
 		return
 	}
-	payload := domain.ChapterStatusPayload{
-		ChapterID:    chapter.ChapterID,
-		ChapterTitle: chapter.Title,
-		ChapterIndex: chapter.ChapterIndex,
-		Status:       domain.GenerationChapterCompleted,
-		Progress: domain.GenerationProgressPayload{
-			CompletedChapters: sequence,
-			TotalChapters:     total,
-			CompletedScenes:   len(result.Scenes),
-			TotalScenes:       len(result.Scenes),
-			OverallProgress:   progressPercent(sequence, total),
+	progress := domain.GenerationProgressPayload{
+		CompletedChapters: sequence,
+		TotalChapters:     total,
+		CompletedScenes:   len(result.Scenes),
+		TotalScenes:       len(result.Scenes),
+		OverallProgress:   progressPercent(sequence, total),
+	}
+	payload := domain.ChapterCompletedPayload{
+		ChapterStatusPayload: domain.ChapterStatusPayload{
+			ChapterID:    chapter.ChapterID,
+			ChapterTitle: chapter.Title,
+			ChapterIndex: chapter.ChapterIndex,
+			Status:       domain.GenerationChapterCompleted,
+			Progress:     progress,
 		},
+		ChapterSummary:          result.ChapterSummary,
+		ChapterSchemaDesignNote: schemaDesignNotePayload(result.ChapterSchemaDesignNote),
+		CarryContextSummary:     result.CarryContext.PreviousChapterSummary,
+		Scenes:                  sceneYAMLPayloads(result.Scenes),
 	}
 	s.events.Publish(domain.GenerationEvent{EventID: newID("event", projectID, jobID, chapter.ChapterID, "completed"), EventType: domain.GenerationEventChapterCompleted, ProjectID: projectID, JobID: jobID, Sequence: sequence, CreatedAt: time.Now().UTC(), Payload: payload})
+}
+
+func (s *GenerationService) publishSchemaSummaryEvent(projectID, jobID string, chapter domain.GenerationChapter, result ChapterGenerationResult, sequence int) {
+	if s.events == nil {
+		return
+	}
+	payload := map[string]any{
+		"chapter_id":                 chapter.ChapterID,
+		"chapter_title":              chapter.Title,
+		"chapter_index":              chapter.ChapterIndex,
+		"chapter_schema_design_note": schemaDesignNotePayload(result.ChapterSchemaDesignNote),
+		"carry_context_summary":      result.CarryContext.PreviousChapterSummary,
+	}
+	s.events.Publish(domain.GenerationEvent{EventID: newID("event", projectID, jobID, chapter.ChapterID, "schema-summary"), EventType: domain.GenerationEventSchemaSummary, ProjectID: projectID, JobID: jobID, Sequence: sequence, CreatedAt: time.Now().UTC(), Payload: payload})
+}
+
+func schemaDesignNotePayload(note ChapterSchemaDesignNote) domain.SchemaDesignNotePayload {
+	reasons := make([]domain.SchemaKeyReasonPayload, 0, len(note.KeyReasons))
+	for _, reason := range note.KeyReasons {
+		reasons = append(reasons, domain.SchemaKeyReasonPayload{FieldName: reason.FieldName, Reason: reason.Reason})
+	}
+	return domain.SchemaDesignNotePayload{Summary: note.Summary, KeyReasons: reasons}
+}
+
+func sceneYAMLPayloads(scenes []GeneratedScene) []domain.ChapterSceneYAMLPayload {
+	payloads := make([]domain.ChapterSceneYAMLPayload, 0, len(scenes))
+	for _, scene := range scenes {
+		payloads = append(payloads, domain.ChapterSceneYAMLPayload{
+			SceneID:     scene.SceneID,
+			SceneIndex:  scene.SceneIndex,
+			Title:       scene.Title,
+			Summary:     scene.Summary,
+			YAMLContent: scene.YAMLContent,
+		})
+	}
+	return payloads
 }
 
 func (s *GenerationService) publishFailureEvent(projectID, jobID string, chapter domain.GenerationChapter, err error, sequence, total int) {
@@ -298,6 +344,9 @@ func progressPercent(completed, total int) float64 {
 }
 
 func renderDesignNoteYAML(note ChapterSchemaDesignNote) string {
+	if strings.TrimSpace(note.Summary) == "" && len(note.KeyReasons) == 0 {
+		return ""
+	}
 	var b strings.Builder
 	b.WriteString("summary: \"")
 	b.WriteString(strings.ReplaceAll(note.Summary, "\"", "'"))

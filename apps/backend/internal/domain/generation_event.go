@@ -44,6 +44,33 @@ type ChapterStatusPayload struct {
 	Error        *GenerationError          `json:"error,omitempty"`
 }
 
+type ChapterCompletedPayload struct {
+	ChapterStatusPayload
+	ChapterSummary          string                    `json:"chapter_summary"`
+	ChapterSchemaDesignNote SchemaDesignNotePayload   `json:"chapter_schema_design_note"`
+	CarryContextSummary     string                    `json:"carry_context_summary"`
+	Scenes                  []ChapterSceneYAMLPayload `json:"scenes"`
+}
+
+type SchemaDesignNotePayload struct {
+	Summary    string                   `json:"summary"`
+	KeyReasons []SchemaKeyReasonPayload `json:"key_reasons"`
+}
+
+type SchemaKeyReasonPayload struct {
+	FieldName string `json:"field_name"`
+	Reason    string `json:"reason"`
+}
+
+type ChapterSceneYAMLPayload struct {
+	SceneID       string         `json:"scene_id"`
+	SceneIndex    int            `json:"scene_index"`
+	Title         string         `json:"title"`
+	Summary       string         `json:"summary"`
+	YAMLContent   string         `json:"yaml_content"`
+	DesignReasons []DesignReason `json:"design_reasons"`
+}
+
 type SceneStatusPayload struct {
 	ChapterID    string                    `json:"chapter_id"`
 	ChapterTitle string                    `json:"chapter_title"`

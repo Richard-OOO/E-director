@@ -8,6 +8,7 @@ require (
 	golang.org/x/crypto v0.31.0
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/gorm v1.25.12
+	rsc.io/pdf v0.1.1
 )
 
 require (
@@ -42,4 +43,3 @@ require (
 	google.golang.org/protobuf v1.34.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
