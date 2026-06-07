@@ -12,4 +12,5 @@ var (
 	ErrCodeExpired        = errors.New("verification code expired")
 	ErrTooManyAttempts    = errors.New("too many verification attempts")
 	ErrMailUnavailable    = errors.New("mail service unavailable")
+	ErrNotFound           = errors.New("not found")
 )

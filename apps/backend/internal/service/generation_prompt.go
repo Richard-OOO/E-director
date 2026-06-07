@@ -37,6 +37,8 @@ type ChapterPromptConfig struct {
 	EnableCameraDirections bool
 	EnableDialogues        bool
 	EnableEmotionTags      bool
+	SystemPromptOverride   string
+	StylePrompt            string
 }
 
 type ChapterCarryContext struct {
@@ -148,23 +150,22 @@ type SchemaKeyReason struct {
 
 func NewChapterPromptBuilder() ChapterPromptBuilder {
 	return ChapterPromptBuilder{
-		SchemaVersion: "1.0",
-		BaseSystemPrompt: strings.TrimSpace(`You are E-Director, a professional film director and AI video script formatter.
-Convert one novel chapter into scene-level YAML scripts using the fixed E-director YAML Schema.
-Return only JSON that matches the requested outer response shape. Do not return markdown.
-Do not invent new YAML schema fields; only fill the fixed YAML schema fields with content from the chapter.`),
+		SchemaVersion:    "1.0",
+		BaseSystemPrompt: defaultSystemPromptContent,
 	}
 }
 
 func (b ChapterPromptBuilder) BuildChapterPrompt(input ChapterPromptInput) ChapterPrompt {
+	systemPrompt := defaultString(input.Config.SystemPromptOverride, defaultString(b.BaseSystemPrompt, NewChapterPromptBuilder().BaseSystemPrompt))
 	return ChapterPrompt{
-		SystemPrompt: defaultString(b.BaseSystemPrompt, NewChapterPromptBuilder().BaseSystemPrompt),
+		SystemPrompt: systemPrompt,
 		UserPrompt: strings.Join([]string{
 			fmt.Sprintf("Novel title: %s", input.NovelTitle),
 			fmt.Sprintf("Language: %s", input.Language),
 			fmt.Sprintf("Current chapter: %s / %s / index %d", input.ChapterID, input.ChapterTitle, input.ChapterIndex),
 			b.BuildContinuityBlock(input.PreviousContext),
 			b.BuildRequirementsBlock(input.Config),
+			b.BuildStylePromptBlock(input.Config.StylePrompt),
 			"Current chapter content:",
 			input.ChapterContent,
 		}, "\n\n"),
@@ -192,6 +193,14 @@ func (b ChapterPromptBuilder) BuildRequirementsBlock(config ChapterPromptConfig)
 - Camera directions enabled: %t.
 - Dialogues enabled: %t.
 - Emotion tags enabled: %t.`, defaultString(config.TargetFormat, "yaml"), defaultString(config.SceneGranularity, "medium"), config.EnableCameraDirections, config.EnableDialogues, config.EnableEmotionTags)
+}
+
+func (b ChapterPromptBuilder) BuildStylePromptBlock(stylePrompt string) string {
+	stylePrompt = strings.TrimSpace(stylePrompt)
+	if stylePrompt == "" {
+		return "Style prompt: none. Use the default neutral cinematic style."
+	}
+	return "User editable export style prompt. Apply it to wording, pacing, dialogue tone, micro-expression detail, and ai_video_prompt descriptions, but do not change the fixed YAML Schema fields:\n" + stylePrompt
 }
 
 func (b ChapterPromptBuilder) BuildOutputSchema() string {

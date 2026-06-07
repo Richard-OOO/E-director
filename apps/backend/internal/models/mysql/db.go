@@ -27,5 +27,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&GenerationJob{},
 		&GenerationChapter{},
 		&GenerationScene{},
+		&Prompt{},
 	)
 }
