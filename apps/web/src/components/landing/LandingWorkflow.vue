@@ -19,6 +19,11 @@ const props = defineProps<{
   processingError: string
   streamedChapters: StreamedChapterPayload[]
   saveStatus?: string
+  activeProjectId: string
+  isExporting: boolean
+  exportingMode: 'batch' | 'combined' | ''
+  exportStatus: string
+  canExportYaml: boolean
 }>()
 
 const emit = defineEmits<{
@@ -28,6 +33,7 @@ const emit = defineEmits<{
   (event: 'select-stage', stage: LandingStage): void
   (event: 'update-chapters', chapters: LandingChapter[]): void
   (event: 'save-scene-yaml', sceneId: string, yaml: string): void
+  (event: 'export-yaml', mode: 'batch' | 'combined'): void
 }>()
 
 const forwardSaveSceneYAML = (sceneId: string, yaml: string) => {
@@ -79,7 +85,16 @@ const forwardSaveSceneYAML = (sceneId: string, yaml: string) => {
         :streamed-chapters="props.streamedChapters"
       />
 
-      <LandingExportStage v-else-if="props.currentStage === 'export'" key="export" />
+      <LandingExportStage
+        v-else-if="props.currentStage === 'export'"
+        key="export"
+        :active-project-id="props.activeProjectId"
+        :is-exporting="props.isExporting"
+        :exporting-mode="props.exportingMode"
+        :export-status="props.exportStatus"
+        :can-export-yaml="props.canExportYaml"
+        @export-yaml="emit('export-yaml', $event)"
+      />
     </transition>
 
     <LandingStageNav

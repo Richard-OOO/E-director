@@ -111,6 +111,19 @@ export type ProjectSnapshot = {
   scenes?: ProjectSnapshotScene[]
 }
 
+export type PromptItem = {
+  id: string
+  user_id: string
+  key: string
+  name: string
+  content: string
+  default_content: string
+  is_default: boolean
+  is_editable: boolean
+  created_at: string
+  updated_at: string
+}
+
 type AuthData = {
   user: AuthUser
 }
@@ -235,6 +248,50 @@ export const deleteProject = (projectId: string) => {
   return request<{ project_id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' })
 }
 
+export const exportProjectYAML = async (projectId: string) => {
+  const url = apiUrl(`/api/v1/projects/${encodeURIComponent(projectId)}/export/yaml`)
+  const response = await fetch(url, { credentials: 'include' })
+  if (!response.ok) {
+    const result = (await response.json().catch(() => null)) as ApiEnvelope<unknown> | null
+    throw new Error(result?.msg || 'Export failed')
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const filenameMatch = disposition.match(/filename="?([^";]+)"?/)
+  return { blob, filename: filenameMatch?.[1] ?? 'project.yaml.zip' }
+}
+
+export const exportCombinedProjectYAML = async (projectId: string) => {
+  const url = apiUrl(`/api/v1/projects/${encodeURIComponent(projectId)}/export/yaml/combined`)
+  const response = await fetch(url, { credentials: 'include' })
+  if (!response.ok) {
+    const result = (await response.json().catch(() => null)) as ApiEnvelope<unknown> | null
+    throw new Error(result?.msg || 'Export failed')
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const filenameMatch = disposition.match(/filename="?([^";]+)"?/)
+  return { blob, filename: filenameMatch?.[1] ?? 'project.yaml' }
+}
+
+export const listPrompts = () => request<{ prompts: PromptItem[] }>('/api/v1/prompts')
+
+export const createPrompt = (payload: { name: string; content: string }) => {
+  return request<PromptItem>('/api/v1/prompts', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export const updatePrompt = (promptId: string, payload: { name: string; content: string }) => {
+  return request<PromptItem>(`/api/v1/prompts/${encodeURIComponent(promptId)}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
+export const deletePrompt = (promptId: string) => {
+  return request<Record<string, never>>(`/api/v1/prompts/${encodeURIComponent(promptId)}`, { method: 'DELETE' })
+}
+
+export const resetPrompt = (promptId: string) => {
+  return request<PromptItem>(`/api/v1/prompts/${encodeURIComponent(promptId)}/reset`, { method: 'POST' })
+}
+
 export type GenerationEventPayload = Record<string, unknown>
 
 export type GenerationDesignReason = {
@@ -260,12 +317,20 @@ export type StreamedChapterPayload = GenerationEventPayload & {
   chapter_id: string
   chapter_title: string
   chapter_index: number
+  status?: string
   chapter_summary?: string
   chapter_schema_design_note?: {
     summary?: string
     key_reasons?: Array<{ field_name?: string; reason?: string }>
   }
   carry_context_summary?: string
+  progress?: {
+    completed_chapters?: number
+    total_chapters?: number
+    completed_scenes?: number
+    total_scenes?: number
+    overall_progress?: number
+  }
   scenes?: StreamedChapterScene[]
 }
 
