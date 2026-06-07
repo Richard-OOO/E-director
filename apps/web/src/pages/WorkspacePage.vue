@@ -71,34 +71,6 @@ const currentViewTitle = computed(() => t.value.layout.viewTitles[view.value])
 let isResizing = false
 let projectEventSource: EventSource | null = null
 
-const debugLog = (label: string, payload?: unknown) => {
-  console.debug(`[e-director:workspace] ${label}`, payload)
-}
-
-const summarizeEditorChapters = (chapters: LandingChapter[]) => ({
-  chapter_count: chapters.length,
-  scene_count: chapters.reduce((sum, chapter) => sum + chapter.scenes.length, 0),
-  yaml_scene_count: chapters.reduce((sum, chapter) => sum + chapter.scenes.filter((scene) => scene.yaml?.trim()).length, 0),
-  first_chapter: chapters[0]
-    ? {
-        id: chapters[0].id,
-        title: chapters[0].title,
-        scene_count: chapters[0].scenes.length,
-        first_scene_yaml_length: chapters[0].scenes[0]?.yaml?.length ?? 0,
-      }
-    : null,
-})
-
-const summarizeStreamedChapters = (chapters: StreamedChapterPayload[]) => ({
-  chapter_count: chapters.length,
-  chapters: chapters.map((chapter) => ({
-    chapter_id: chapter.chapter_id,
-    chapter_index: chapter.chapter_index,
-    scene_count: chapter.scenes?.length ?? 0,
-    yaml_lengths: chapter.scenes?.map((scene) => scene.yaml_content?.length ?? 0) ?? [],
-  })),
-})
-
 const selectWorkspaceView = (nextView: LandingView) => {
   view.value = nextView
   if (nextView === 'archive') {
@@ -114,14 +86,11 @@ const selectWorkspaceView = (nextView: LandingView) => {
 
 const hasLandingChapterYAML = (chapters: LandingChapter[]) => {
   const hasYAML = chapters.some((chapter) => chapter.scenes.some((scene) => typeof scene.yaml === 'string' && scene.yaml.trim()))
-  debugLog('hasLandingChapterYAML', { hasYAML, chapters: summarizeEditorChapters(chapters) })
   return hasYAML
 }
 
 const selectWorkspaceStage = (stage: LandingStage) => {
-  debugLog('selectWorkspaceStage requested', { stage, currentStage: currentStage.value, editorChapters: summarizeEditorChapters(editorChapters.value), isGenerationFinished: isGenerationFinished.value })
   if (stage === 'export' && !isGenerationFinished.value) {
-    debugLog('selectWorkspaceStage blocked export', { reason: 'generation is not finished' })
     currentStage.value = 'processing'
     view.value = 'new'
     processingDetail.value = 'Please wait until all chapters finish generating before exporting YAML.'
@@ -129,7 +98,6 @@ const selectWorkspaceStage = (stage: LandingStage) => {
     return
   }
   if (stage === 'editor' && !hasLandingChapterYAML(editorChapters.value)) {
-    debugLog('selectWorkspaceStage blocked editor', { reason: 'no editor YAML yet' })
     currentStage.value = 'processing'
     view.value = 'new'
     void router.push('/workspace/progress')
@@ -150,7 +118,6 @@ const syncRouteState = () => {
   const state = routeMap[route.path]
   if (!state) return
   const nextStage = state.stage === 'editor' && !hasLandingChapterYAML(editorChapters.value) ? 'processing' : state.stage
-  debugLog('syncRouteState', { path: route.path, routeStage: state.stage, nextStage, editorChapters: summarizeEditorChapters(editorChapters.value) })
   view.value = state.view
   currentStage.value = nextStage
 }
@@ -288,56 +255,37 @@ const normalizeStreamedChapter = (payload: Record<string, unknown>, existing?: S
 
 const upsertStreamedChapter = (payload: Record<string, unknown>) => {
   const chapterId = payloadString(payload, 'chapter_id')
-  debugLog('upsertStreamedChapter', {
-    chapterId,
-    payloadKeys: Object.keys(payload),
-    sceneCount: Array.isArray(payload.scenes) ? payload.scenes.length : 0,
-    yamlLengths: Array.isArray(payload.scenes) ? payload.scenes.map((scene) => (typeof scene === 'object' && scene !== null && typeof (scene as Record<string, unknown>).yaml_content === 'string' ? ((scene as Record<string, string>).yaml_content.length) : 0)) : [],
-  })
   if (!chapterId) return
   const existingIndex = streamedChapters.value.findIndex((item) => item.chapter_id === chapterId)
   const chapter = normalizeStreamedChapter(payload, existingIndex >= 0 ? streamedChapters.value[existingIndex] : undefined)
   if (!chapter) return
   if (existingIndex >= 0) {
     streamedChapters.value.splice(existingIndex, 1, chapter)
-    debugLog('streamedChapters updated existing', summarizeStreamedChapters(streamedChapters.value))
     return
   }
   streamedChapters.value = [...streamedChapters.value, chapter].sort((a, b) => (a.chapter_index || 0) - (b.chapter_index || 0))
-  debugLog('streamedChapters inserted', summarizeStreamedChapters(streamedChapters.value))
 }
 
 const hasGeneratedSceneYAML = (chapter: StreamedChapterPayload) => {
   const hasYAML = (chapter.scenes ?? []).some((scene) => typeof scene.yaml_content === 'string' && scene.yaml_content.trim())
-  debugLog('hasGeneratedSceneYAML', {
-    chapter_id: chapter.chapter_id,
-    chapter_index: chapter.chapter_index,
-    hasYAML,
-    yamlLengths: chapter.scenes?.map((scene) => scene.yaml_content?.length ?? 0) ?? [],
-  })
   return hasYAML
 }
 
 const isFirstChapterReady = () => {
   const firstChapter = streamedChapters.value.find((chapter) => chapter.chapter_index === 1)
   const ready = !!firstChapter && hasGeneratedSceneYAML(firstChapter)
-  debugLog('isFirstChapterReady', { ready, firstChapter, streamedChapters: summarizeStreamedChapters(streamedChapters.value) })
   return ready
 }
 
 const syncStreamedChaptersToEditor = () => {
-  debugLog('syncStreamedChaptersToEditor start', summarizeStreamedChapters(streamedChapters.value))
   if (!streamedChapters.value.some(hasGeneratedSceneYAML)) {
-    debugLog('syncStreamedChaptersToEditor blocked', { reason: 'no chapter has YAML yet' })
     return
   }
   const chapters = streamedChaptersToLandingChapters(streamedChapters.value)
   if (!chapters.length) {
-    debugLog('syncStreamedChaptersToEditor blocked', { reason: 'mapped landing chapters are empty' })
     return
   }
   editorChapters.value = chapters
-  debugLog('syncStreamedChaptersToEditor applied', summarizeEditorChapters(editorChapters.value))
   if (currentStage.value === 'processing') {
     selectWorkspaceStage('editor')
   }
@@ -416,28 +364,18 @@ const updateProcessingFromEvent = (event: GenerationEvent) => {
 const subscribeProjectEvents = (projectId: string, jobId: string) => {
   closeProjectEvents()
   const url = projectEventsUrl(projectId, jobId)
-  debugLog('subscribeProjectEvents', { projectId, jobId, url })
   projectEventSource = new EventSource(url, { withCredentials: true })
 
   const handleEvent = async (message: MessageEvent<string>) => {
     try {
-      debugLog('sse raw message', { type: message.type, data: message.data })
       const event = JSON.parse(message.data) as GenerationEvent
-      debugLog('sse parsed event', {
-        event_type: event.event_type,
-        sequence: event.sequence,
-        payloadKeys: Object.keys(event.payload ?? {}),
-        payload: event.payload,
-      })
       updateProcessingFromEvent(event)
 
       if (event.event_type === 'generation_completed') {
         closeProjectEvents()
         await refreshProjects()
         const snapshot = await getProject(projectId)
-        debugLog('generation_completed snapshot data', snapshot)
         const chapters = snapshotToLandingChapters(snapshot)
-        debugLog('generation_completed mapped chapters', summarizeEditorChapters(chapters))
         if (hasLandingChapterYAML(chapters)) {
           activeProjectId.value = projectId
           isGenerationFinished.value = true
@@ -445,7 +383,6 @@ const subscribeProjectEvents = (projectId: string, jobId: string) => {
           view.value = 'new'
           selectWorkspaceStage('editor')
         } else if (currentStage.value !== 'editor') {
-          debugLog('generation_completed no editable YAML scenes', { snapshot, chapters: summarizeEditorChapters(chapters) })
           processingDetail.value = 'Generation completed, but no editable YAML scenes were returned.'
         }
       }
@@ -455,7 +392,6 @@ const subscribeProjectEvents = (projectId: string, jobId: string) => {
         await refreshProjects()
       }
     } catch (error) {
-      debugLog('sse handle error', error)
       processingError.value = error instanceof Error ? error.message : 'Unable to parse generation event'
     }
   }
@@ -468,7 +404,6 @@ const subscribeProjectEvents = (projectId: string, jobId: string) => {
   })
 
   projectEventSource.onerror = (error) => {
-    debugLog('sse error', { error, readyState: projectEventSource?.readyState, progress: processingProgress.value, processingError: processingError.value })
     if (!processingError.value && processingProgress.value < 100) {
       processingDetail.value = 'Waiting for the generation event stream to reconnect...'
     }
@@ -505,13 +440,10 @@ const nextStage = () => {
 }
 
 const loadProjectIntoEditor = async (projectId: string) => {
-  debugLog('loadProjectIntoEditor start', { projectId })
   const snapshot = await getProject(projectId)
   activeProjectId.value = projectId
   isGenerationFinished.value = true
-  debugLog('loadProjectIntoEditor snapshot', snapshot)
   editorChapters.value = snapshotToLandingChapters(snapshot)
-  debugLog('loadProjectIntoEditor mapped chapters', summarizeEditorChapters(editorChapters.value))
   view.value = 'new'
   selectWorkspaceStage('editor')
 }
@@ -520,16 +452,13 @@ const handleCreateProject = async (payload: CreateProjectPayload) => {
   isCreatingProject.value = true
   createError.value = ''
   resetProcessingState()
-  debugLog('handleCreateProject start', { title: payload.title, language: payload.language, source_type: payload.source_type, hasFile: !!payload.file, contentLength: payload.content?.length ?? 0 })
   try {
     const result = await createProject(payload)
     activeProjectId.value = result.project_id
-    debugLog('createProject result', result)
     selectWorkspaceStage('processing')
     await refreshProjects()
     subscribeProjectEvents(result.project_id, result.job_id)
   } catch (error) {
-    debugLog('handleCreateProject error', error)
     createError.value = error instanceof Error ? error.message : 'Create project failed'
     selectWorkspaceStage('import')
   } finally {
@@ -616,7 +545,6 @@ watch(() => route.path, syncRouteState, { immediate: true })
 
 const refreshProjects = async () => {
   const data = await listProjects()
-  debugLog('refreshProjects result', data)
   archiveItems.value = data.projects
 }
 

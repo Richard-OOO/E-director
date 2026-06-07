@@ -46,7 +46,6 @@ const saveYaml = () => {
       :value="draftYaml"
       spellcheck="false"
       @input="updateYaml"
-      @blur="saveYaml"
     ></textarea>
   </div>
 </template>

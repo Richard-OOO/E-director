@@ -190,6 +190,9 @@ func (s *GenerationService) runProjectGeneration(ctx context.Context, project do
 			},
 		})
 		result, err := s.generator.GenerateChapter(ctx, prompt)
+		if err == nil {
+			err = validateChapterGenerationResult(chapter, result)
+		}
 		if err != nil {
 			fmt.Printf("[e-director:generation] GenerateChapter failed project_id=%s job_id=%s chapter_id=%s err=%v\n", projectID, jobID, chapter.ChapterID, err)
 			chapter.Status = domain.GenerationChapterFailed
@@ -549,6 +552,14 @@ func progressPercent(completed, total int) float64 {
 	return float64(completed) / float64(total) * 100
 }
 
+func validateChapterGenerationResult(chapter domain.GenerationChapter, result ChapterGenerationResult) error {
+	chapterID := strings.TrimSpace(result.ChapterID)
+	if chapterID != "" && chapterID != chapter.ChapterID {
+		return fmt.Errorf("generated chapter_id %q does not match expected %q", chapterID, chapter.ChapterID)
+	}
+	return nil
+}
+
 func renderDesignNoteYAML(note ChapterSchemaDesignNote) string {
 	if strings.TrimSpace(note.Summary) == "" && len(note.KeyReasons) == 0 {
 		return ""
@@ -563,24 +574,6 @@ func renderDesignNoteYAML(note ChapterSchemaDesignNote) string {
 		b.WriteString("\"\n    reason: \"")
 		b.WriteString(strings.ReplaceAll(reason.Reason, "\"", "'"))
 		b.WriteString("\"\n")
-	}
-	return strings.TrimSpace(b.String())
-}
-
-func renderDesignReasonsYAML(reasons []domain.DesignReason) string {
-	if len(reasons) == 0 {
-		return "[]"
-	}
-	var b strings.Builder
-	b.WriteString("- reasons:\n")
-	for _, reason := range reasons {
-		b.WriteString(fmt.Sprintf("  - reason_id: %s\n", reason.ReasonID))
-		b.WriteString(fmt.Sprintf("    target_path: %s\n", reason.TargetPath))
-		b.WriteString(fmt.Sprintf("    field_name: %s\n", reason.FieldName))
-		b.WriteString(fmt.Sprintf("    reason_type: %s\n", reason.ReasonType))
-		b.WriteString(fmt.Sprintf("    title: %s\n", reason.Title))
-		b.WriteString(fmt.Sprintf("    description: %s\n", reason.Description))
-		b.WriteString(fmt.Sprintf("    hover_text: %s\n", reason.HoverText))
 	}
 	return strings.TrimSpace(b.String())
 }
