@@ -17,14 +17,14 @@ const (
 )
 
 type GenerationEvent struct {
-	EventID   string
-	EventType GenerationEventType
-	ProjectID string
-	JobID     string
-	SessionID string
-	Sequence  int
-	CreatedAt time.Time
-	Payload   any
+	EventID   string              `json:"event_id"`
+	EventType GenerationEventType `json:"event_type"`
+	ProjectID string              `json:"project_id"`
+	JobID     string              `json:"job_id"`
+	SessionID string              `json:"session_id,omitempty"`
+	Sequence  int                 `json:"sequence"`
+	CreatedAt time.Time           `json:"created_at"`
+	Payload   any                 `json:"payload"`
 }
 
 type GenerationProgressPayload struct {

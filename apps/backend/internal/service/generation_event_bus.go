@@ -6,13 +6,19 @@ import (
 	"github.com/Richard-OOO/E-director/apps/backend/internal/domain"
 )
 
+const generationEventHistoryLimit = 64
+
 type GenerationEventBus struct {
 	mu          sync.RWMutex
 	subscribers map[string]map[chan domain.GenerationEvent]struct{}
+	history     map[string][]domain.GenerationEvent
 }
 
 func NewGenerationEventBus() *GenerationEventBus {
-	return &GenerationEventBus{subscribers: make(map[string]map[chan domain.GenerationEvent]struct{})}
+	return &GenerationEventBus{
+		subscribers: make(map[string]map[chan domain.GenerationEvent]struct{}),
+		history:     make(map[string][]domain.GenerationEvent),
+	}
 }
 
 func (b *GenerationEventBus) Subscribe(projectID, jobID string) (<-chan domain.GenerationEvent, func()) {
@@ -24,6 +30,9 @@ func (b *GenerationEventBus) Subscribe(projectID, jobID string) (<-chan domain.G
 		b.subscribers[key] = make(map[chan domain.GenerationEvent]struct{})
 	}
 	b.subscribers[key][ch] = struct{}{}
+	for _, event := range b.history[key] {
+		ch <- event
+	}
 	b.mu.Unlock()
 
 	cancel := func() {
@@ -46,15 +55,18 @@ func (b *GenerationEventBus) Subscribe(projectID, jobID string) (<-chan domain.G
 func (b *GenerationEventBus) Publish(event domain.GenerationEvent) {
 	key := b.key(event.ProjectID, event.JobID)
 
-	b.mu.RLock()
-	subs := b.subscribers[key]
-	for ch := range subs {
+	b.mu.Lock()
+	b.history[key] = append(b.history[key], event)
+	if len(b.history[key]) > generationEventHistoryLimit {
+		b.history[key] = b.history[key][len(b.history[key])-generationEventHistoryLimit:]
+	}
+	for ch := range b.subscribers[key] {
 		select {
 		case ch <- event:
 		default:
 		}
 	}
-	b.mu.RUnlock()
+	b.mu.Unlock()
 }
 
 func (b *GenerationEventBus) Close(projectID, jobID string) {
